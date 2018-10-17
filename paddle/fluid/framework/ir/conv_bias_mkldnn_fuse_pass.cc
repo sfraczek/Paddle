@@ -86,41 +86,19 @@ std::unique_ptr<ir::Graph> ConvBiasFusePass::ApplyImpl(
       PADDLE_ENFORCE_EQ(conv_bias_tensor->dims(), eltwise_bias_tensor->dims());
       *conv_bias_tensor = tensor_apply_eltwise(
           *conv_bias_tensor, *eltwise_bias_tensor, std::plus<float>());
-
-      conv->Op()->SetOutput("Output",
-                            std::vector<std::string>({eltwise_out->Name()}));
-
-      GraphSafeRemoveNodes(graph.get(), {eltwise, conv_out});
-
-      IR_NODE_LINK_TO(conv, eltwise_out);
     } else {
       // take eltwise bias as conv bias
-      OpDesc desc;
-
-      desc.SetInput(
-          "Input", std::vector<std::string>({subgraph.at(conv_input)->Name()}));
-      desc.SetInput("Filter", std::vector<std::string>({conv_weight->Name()}));
-      desc.SetInput("Bias", std::vector<std::string>({eltwise_bias->Name()}));
-      desc.SetOutput("Output", std::vector<std::string>({eltwise_out->Name()}));
-      desc.SetType("conv2d");
-
-      for (auto& attr : conv->Op()->GetAttrMap()) {
-        desc.SetAttr(attr.first, attr.second);
-      }
-      auto conv_bias_node = g->CreateOpNode(&desc);
-
-      IR_NODE_LINK_TO(subgraph.at(conv_input), conv_bias_node);
-      IR_NODE_LINK_TO(conv_weight, conv_bias_node);
-      IR_NODE_LINK_TO(eltwise_bias, conv_bias_node);
-      IR_NODE_LINK_TO(conv_bias_node, eltwise_out);
-
-      GraphSafeRemoveNodes(graph.get(), {conv, eltwise, conv_out});
-
-      //      conv->Op()->SetInput("Bias",
-      //                           std::vector<std::string>({eltwise_bias->Name()}));
-      //      IR_NODE_LINK_TO(eltwise_bias, conv);
+      conv->Op()->SetInput("Bias",
+                           std::vector<std::string>({eltwise_bias->Name()}));
+      IR_NODE_LINK_TO(eltwise_bias, conv);
     }
 
+    conv->Op()->SetOutput("Output",
+                          std::vector<std::string>({eltwise_out->Name()}));
+
+    GraphSafeRemoveNodes(graph.get(), {eltwise, conv_out});
+
+    IR_NODE_LINK_TO(conv, eltwise_out);
     found_conv_bias_count++;
   };
   gpd(graph.get(), handler);
