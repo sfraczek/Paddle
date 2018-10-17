@@ -23,21 +23,6 @@ namespace paddle {
 namespace framework {
 namespace ir {
 
-template <typename BinaryOperation>
-LoDTensor tensor_apply_eltwise(const LoDTensor& vec_a, const LoDTensor& vec_b,
-                               BinaryOperation f) {
-  PADDLE_ENFORCE_EQ(vec_a.dims(), vec_b.dims());
-  LoDTensor vec_y;
-  vec_y.Resize(vec_a.dims());
-  const float* a = vec_a.data<float>();
-  const float* b = vec_b.data<float>();
-  float* y = vec_y.mutable_data<float>(platform::CPUPlace());
-  for (int i = 0; i < vec_a.numel(); i++) {
-    y[i] = f(a[i], b[i]);
-  }
-  return vec_y;
-}
-
 std::unique_ptr<ir::Graph> ConvBiasFusePass::ApplyImpl(
     std::unique_ptr<ir::Graph> graph) const {
   PADDLE_ENFORCE(graph.get());
@@ -84,8 +69,19 @@ std::unique_ptr<ir::Graph> ConvBiasFusePass::ApplyImpl(
       auto* conv_bias_var = scope->FindVar(conv_bias_names[0]);
       auto* conv_bias_tensor = conv_bias_var->GetMutable<LoDTensor>();
       PADDLE_ENFORCE_EQ(conv_bias_tensor->dims(), eltwise_bias_tensor->dims());
-      *conv_bias_tensor = tensor_apply_eltwise(
-          *conv_bias_tensor, *eltwise_bias_tensor, std::plus<float>());
+
+      using EigenVectorArrayMap =
+          Eigen::Map<Eigen::Array<float, Eigen::Dynamic, 1>>;
+
+      EigenVectorArrayMap conv_bias_array(
+          conv_bias_tensor->mutable_data<float>(platform::CPUPlace()),
+          conv_bias_tensor->numel(), 1);
+
+      EigenVectorArrayMap eltwise_bias_array(
+          eltwise_bias_tensor->mutable_data<float>(platform::CPUPlace()),
+          eltwise_bias_tensor->numel(), 1);
+
+      conv_bias_array += eltwise_bias_array;
     } else {
       // take eltwise bias as conv bias
       conv->Op()->SetInput("Bias",
