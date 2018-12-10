@@ -95,10 +95,15 @@ class EltwiseAddMKLDNNKernel : public framework::OpKernel<T> {
       std::vector<memory> srcs;
       std::vector<float> scales = {1.0f, 1.0f};
 
+      auto x_input_format =
+          platform::MKLDNNFormatForSize(src_x_tz.size(), x->format());
+      auto y_input_format =
+          platform::MKLDNNFormatForSize(src_y_tz.size(), y->format());
+
       auto src_x_pd = memory::primitive_desc(
-          {{src_x_tz}, memory::data_type::f32, x->format()}, mkldnn_engine);
+          {{src_x_tz}, memory::data_type::f32, x_input_format}, mkldnn_engine);
       auto src_y_pd = memory::primitive_desc(
-          {{src_y_tz}, memory::data_type::f32, y->format()}, mkldnn_engine);
+          {{src_y_tz}, memory::data_type::f32, y_input_format}, mkldnn_engine);
       auto src_x_memory =
           memory(src_x_pd, paddle::platform::to_void_cast(x_data));
       auto src_y_memory =

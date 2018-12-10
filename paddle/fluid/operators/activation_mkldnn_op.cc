@@ -100,13 +100,12 @@ void eltwise_forward(const framework::ExecutionContext &ctx,
   const T *x_data = x->data<T>();
   T *y_data = y->mutable_data<T>(ctx.GetPlace());
 
-  PADDLE_ENFORCE(x->dims().size() == 2 || x->dims().size() == 4,
+  PADDLE_ENFORCE(x->dims().size() >= 2 || x->dims().size() <= 4,
                  "Input dim must be with 2 or 4");
 
   std::vector<int> src_tz = framework::vectorize2int(x->dims());
 
-  auto src_format =
-      src_tz.size() == 2 ? mkldnn::memory::format::nc : x->format();
+  auto src_format = platform::MKLDNNFormatForSize(src_tz.size(), x->format());
 
   const std::string key = gethash(src_tz, algorithm);
   const std::string key_src_data =

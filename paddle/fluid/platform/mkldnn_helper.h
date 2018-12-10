@@ -113,6 +113,8 @@ inline mkldnn::memory::format MKLDNNFormatForSize(
     return mkldnn::memory::format::x;
   } else if (dims_size == 2) {
     return mkldnn::memory::format::nc;
+  } else if (dims_size == 3) {
+    return mkldnn::memory::format::ntc;
   }
   return data_format;
 }
