@@ -107,6 +107,7 @@ contrib::AnalysisConfig::AnalysisConfig(const contrib::AnalysisConfig &other) {
   // INT8 related.
   CP_MEMBER(use_int8_);
   CP_MEMBER(int8_enabled_op_types_);
+  CP_MEMBER(quant_warmup_data_);
 
   // Ir related.
   CP_MEMBER(enable_ir_optim_);

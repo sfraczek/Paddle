@@ -89,7 +89,25 @@ bool AnalysisPredictor::Init(
   // Get the feed_target_names and fetch_target_names
   PrepareFeedFetch();
 
+  // Get data from the variables that must be quantized
+  if (!PrepareQuantData()) {
+    return false;
+  }
+
   return true;
+}
+
+bool AnalysisPredictor::PrepareQuantData() {
+  if (config_.int8_enabled()) {
+    // a vector for variables to be quantized
+    std::unique_ptr<std::map<std::string, PaddleTensor>> q_vars(
+        new std::vector<PaddleTensor>());
+    // run 1 iteration of inference
+    RunQuantWarmup(q_vars);
+    // store the data in the int8_scale_pass
+    auto pass = framework::ir::PassRegistry::Instance().Get("quant_scale_pass");
+    pass->Set("quant_vars_data", std::move(q_vars));
+  }
 }
 
 bool AnalysisPredictor::PrepareScope(
@@ -210,6 +228,27 @@ bool AnalysisPredictor::Run(const std::vector<PaddleTensor> &inputs,
   return true;
 }
 
+bool AnalysisPredictor::RunQuantWarmup(
+    std::unique_ptr<std::map<std::string, PaddleTensor>> quant_vars) {
+  VLOG(3) << "Predictor: run a quantization warmup iteration";
+  PADDLE_ENFORCE_NOT_NULL(config.quant_warmup_data_,
+                          "Warmup data cannot be NULL in the config.");
+  framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
+
+  if (!SetFeed(config_.quant_warmup_data_, scope)) {
+    LOG(ERROR) << "fail to set feed for warmup iteration";
+    return false;
+  }
+
+  // Run the inference program
+  executor_->Run();
+
+  if (!GetQuantVars(quant_vars)) {
+    LOG(ERROR) << "fail to get quant variables";
+    return false;
+  }
+}
+
 bool AnalysisPredictor::SetFeed(const std::vector<PaddleTensor> &inputs,
                                 framework::Scope *scope) {
   VLOG(3) << "Predictor::set_feed";
@@ -317,6 +356,12 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
       LOG(ERROR) << "unknown type, only support float32 and int64 now.";
     }
   }
+  return true;
+}
+
+bool AnalysisPredictor::GetQuantVars(
+    std::unique_ptr<std::map<std::string, PaddleTensor>> quant_vars) {
+  framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
   return true;
 }
 

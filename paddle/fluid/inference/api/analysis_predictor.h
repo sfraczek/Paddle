@@ -85,9 +85,12 @@ class AnalysisPredictor : public PaddlePredictor {
   bool PrepareScope(const std::shared_ptr<framework::Scope> &parent_scope);
   bool CreateExecutor();
   bool PrepareExecutor();
+  bool PrepareQuantData();
 
   bool LoadProgramDesc();
   bool LoadParameters();
+
+  bool RunQuantWarmup(std::unique_ptr<std::vector<PaddleTensor>> quant_vars);
 
   bool SetFeed(const std::vector<PaddleTensor> &input_datas,
                framework::Scope *scope);
@@ -96,6 +99,7 @@ class AnalysisPredictor : public PaddlePredictor {
   template <typename T>
   void GetFetchOne(const framework::LoDTensor &fetchs,
                    PaddleTensor *output_data);
+  bool GetQuantVars(std::vector<PaddleTensor> *quant_vars);
 
 // Some more detailed tests, they are made the friends of the predictor, so that
 // the all the details can be tested.

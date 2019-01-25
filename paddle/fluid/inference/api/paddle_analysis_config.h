@@ -194,6 +194,12 @@ struct AnalysisConfig {
     int8_enabled_op_types_ = op_list;
   }
 
+  void SetQuantWarmupData(std::vector<PaddleTensor>* data) {
+    quant_warmup_data_ = data;
+  }
+
+  std::vector<PaddleTensor>* GetQuantWarmupData() { return quant_warmup_data_; }
+
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.
    * @param prog_buffer_size the size of the data.
@@ -262,6 +268,7 @@ struct AnalysisConfig {
 
   bool use_int8_{false};
   std::unordered_set<std::string> int8_enabled_op_types_;
+  std::vector<PaddleTensor>* quant_warmup_data_;
 
   bool model_from_memory_{false};
 
