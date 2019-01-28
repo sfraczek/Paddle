@@ -123,8 +123,12 @@ struct Argument {
   DECL_ARGUMENT_FIELD(mkldnn_enabled_op_types, MKLDNNEnabledOpTypes,
                       std::unordered_set<std::string>);
 
-  // Pass a set of op types to enable its int8 kernel
-  DECL_ARGUMENT_FIELD(int8_enabled_op_types, INT8EnabledOpTypes,
+  // A set of op types to enable their INT8 kernels
+  DECL_ARGUMENT_FIELD(int8_enabled_op_types, Int8EnabledOpTypes,
+                      std::unordered_set<std::string>);
+
+  // Names of variables to be quantized
+  DECL_ARGUMENT_FIELD(quant_var_names, QuantVarNames,
                       std::unordered_set<std::string>);
 
   // Passed from config.

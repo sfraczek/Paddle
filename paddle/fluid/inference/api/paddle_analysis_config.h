@@ -153,7 +153,7 @@ struct AnalysisConfig {
 
   /** Turn on INT8.
    */
-  void EnableINT8();
+  void EnableInt8();
   /** A boolean state telling whether to use INT8 kernels.
    */
   bool int8_enabled() const { return use_int8_; }
@@ -190,7 +190,7 @@ struct AnalysisConfig {
   /** Specify the operator type list to use INT8 kernel.
    * @param op_list the operator type list.
    */
-  void SetINT8Op(std::unordered_set<std::string> op_list) {
+  void SetInt8Op(std::unordered_set<std::string> op_list) {
     int8_enabled_op_types_ = op_list;
   }
 

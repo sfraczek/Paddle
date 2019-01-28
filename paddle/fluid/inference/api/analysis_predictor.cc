@@ -99,15 +99,22 @@ bool AnalysisPredictor::Init(
 
 bool AnalysisPredictor::PrepareQuantData() {
   if (config_.int8_enabled()) {
+    auto gather_pass = framework::ir::PassRegistry::Instance().Get(
+        "quant_gather_var_names_pass");
+    const auto &qvars_names =
+        gather_pass->Get<std::unordered_set<std::string>>("quant_var_names");
+    std::cout << "Length of the names set: " << qvars_names.size() << std::endl;
     // a vector for variables to be quantized
-    std::unique_ptr<std::map<std::string, PaddleTensor>> q_vars(
-        new std::vector<PaddleTensor>());
+    // std::unique_ptr<std::map<std::string, PaddleTensor>> q_vars(
+    // new std::vector<PaddleTensor>());
     // run 1 iteration of inference
-    RunQuantWarmup(q_vars);
+    // RunQuantWarmup(q_vars);
     // store the data in the int8_scale_pass
-    auto pass = framework::ir::PassRegistry::Instance().Get("quant_scale_pass");
-    pass->Set("quant_vars_data", std::move(q_vars));
+    // auto pass =
+    // framework::ir::PassRegistry::Instance().Get("quant_scale_pass");
+    // pass->Set("quant_vars_data", std::move(q_vars));
   }
+  return true;
 }
 
 bool AnalysisPredictor::PrepareScope(
@@ -229,13 +236,13 @@ bool AnalysisPredictor::Run(const std::vector<PaddleTensor> &inputs,
 }
 
 bool AnalysisPredictor::RunQuantWarmup(
-    std::unique_ptr<std::map<std::string, PaddleTensor>> quant_vars) {
+    std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
   VLOG(3) << "Predictor: run a quantization warmup iteration";
-  PADDLE_ENFORCE_NOT_NULL(config.quant_warmup_data_,
+  PADDLE_ENFORCE_NOT_NULL(config_.quant_warmup_data_,
                           "Warmup data cannot be NULL in the config.");
   framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
 
-  if (!SetFeed(config_.quant_warmup_data_, scope)) {
+  if (!SetFeed(*config_.quant_warmup_data_, scope)) {
     LOG(ERROR) << "fail to set feed for warmup iteration";
     return false;
   }
@@ -247,6 +254,7 @@ bool AnalysisPredictor::RunQuantWarmup(
     LOG(ERROR) << "fail to get quant variables";
     return false;
   }
+  return true;
 }
 
 bool AnalysisPredictor::SetFeed(const std::vector<PaddleTensor> &inputs,
@@ -360,8 +368,30 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
 }
 
 bool AnalysisPredictor::GetQuantVars(
-    std::unique_ptr<std::map<std::string, PaddleTensor>> quant_vars) {
+    std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
   framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
+  // go through all the quantized operators and gather all the inputs, outputs,
+  // weights and biases
+  for (size_t i = 0; i < 10; ++i) {
+    std::string qvar_name = "aaa";
+    PaddleTensor qvar;
+    qvar.name = qvar_name;
+    framework::LoDTensor &qvar_lod =
+        framework::GetVariableTensor(*scope, qvar_name);
+    auto type = qvar_lod.type();
+    if (type == framework::proto::VarType::FP32) {
+      GetFetchOne<float>(qvar_lod, &qvar);
+      qvar.dtype = PaddleDType::FLOAT32;
+    } else if (type == framework::proto::VarType::INT64) {
+      GetFetchOne<int64_t>(qvar_lod, &qvar);
+      qvar.dtype = PaddleDType::INT64;
+    } else {
+      LOG(ERROR) << "unknown type, only support float32 and int64 now.";
+    }
+    // std::move?
+    quant_vars->insert(
+        std::pair<std::string, PaddleTensor>(qvar_name, std::move(qvar)));
+  }
   return true;
 }
 
@@ -397,6 +427,11 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
   if (config_.use_mkldnn_) {
     LOG(INFO) << "MKLDNN is enabled";
     argument_.SetMKLDNNEnabledOpTypes(config_.mkldnn_enabled_op_types_);
+  }
+
+  if (config_.use_int8_) {
+    LOG(INFO) << "INT8 optimization is enabled";
+    argument_.SetInt8EnabledOpTypes(config_.int8_enabled_op_types_);
   }
 
   auto passes = config_.pass_builder()->AllPasses();

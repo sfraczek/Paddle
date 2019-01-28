@@ -66,6 +66,10 @@ void GpuPassStrategy::EnableMKLDNN() {
   LOG(ERROR) << "GPU not support MKLDNN yet";
 }
 
+void GpuPassStrategy::EnableQuant() {
+  LOG(ERROR) << "GPU not support quantization yet";
+}
+
 void PaddlePassBuilder::AppendAnalysisPass(const std::string &pass) {
   analysis_passes_.push_back(pass);
 }

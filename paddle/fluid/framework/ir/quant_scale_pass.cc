@@ -30,23 +30,32 @@ std::unique_ptr<ir::Graph> QuantScalePass::ApplyImpl(
   PADDLE_ENFORCE(graph.get());
   FusePassBase::Init(name_scope_, graph.get());
 
-  auto f32_vars_data =
-      Get<std::map<std::string, PaddleTensor>>("f32_vars_data");
+  auto quant_var_names =
+      Get<std::unordered_set<std::string>>("quant_var_names");
+  // auto f32_vars_data =
+  // Get<std::map<std::string, PaddleTensor>>("f32_vars_data");
 
-  for (const Node* n : graph->Nodes()) {
-    if (n->IsOp()) {
-      auto* op = n->Op();
-      if (op->HasAttr("use_int8") &&
-          boost::get<bool>(op->GetAttr("use_int8"))) {
-        // for all input, output, weights and bias variable nodes
-        // take its name
-        // find the name in the map with data
-        // calculate the scale values
-        // create the scale tensor and node
-        // link the scale node to the variable node
-      }
-    }
+  std::cout << "Nazwy zmiennych:" << std::endl;
+  for (auto& name : quant_var_names) {
+    std::cout << name << std::endl;
   }
+
+  /*
+   * for (const Node* n : graph->Nodes()) {
+   *   if (n->IsOp()) {
+   *     auto* op = n->Op();
+   *     if (op->HasAttr("use_int8") &&
+   *         boost::get<bool>(op->GetAttr("use_int8"))) {
+   *       // for all input, output, weights and bias variable nodes
+   *       // take its name
+   *       // find the name in the map with data
+   *       // calculate the scale values
+   *       // create the scale tensor and node
+   *       // link the scale node to the variable node
+   *     }
+   *   }
+   * }
+   */
 
   return graph;
 }

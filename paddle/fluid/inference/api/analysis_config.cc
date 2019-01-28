@@ -134,13 +134,18 @@ contrib::AnalysisConfig::AnalysisConfig(const contrib::AnalysisConfig &other) {
 
 void contrib::AnalysisConfig::EnableMKLDNN() {
 #ifdef PADDLE_WITH_MKLDNN
-  pass_builder()->EnableMKLDNN();
+  // pass_builder()->EnableMKLDNN();
   use_mkldnn_ = true;
 #else
   LOG(ERROR) << "Please compile with MKLDNN first to use MKLDNN";
   use_mkldnn_ = false;
 #endif
 
+  Update();
+}
+
+void contrib::AnalysisConfig::EnableInt8() {
+  use_int8_ = true;
   Update();
 }
 
@@ -210,11 +215,20 @@ void contrib::AnalysisConfig::Update() {
     }
 #ifdef PADDLE_WITH_MKLDNN
     pass_builder()->EnableMKLDNN();
-    use_mkldnn_ = true;
+// use_mkldnn_ = true;
 #else
     LOG(ERROR) << "Please compile with MKLDNN first to use MKLDNN";
     use_mkldnn_ = false;
 #endif
+  }
+
+  // INT8 quantization passes must come after all other optimization passes
+  if (use_int8_) {
+    if (!enable_ir_optim_) {
+      LOG(ERROR) << "EnableInt8() only works when IR optimization is enabled.";
+    }
+    pass_builder_->EnableQuant();
+    use_int8_ = true;
   }
 
   if (enable_memory_optim_) {
@@ -246,6 +260,10 @@ std::string contrib::AnalysisConfig::SerializeInfoCache() {
 
   ss << use_mkldnn_;
   for (auto &item : mkldnn_enabled_op_types_) ss << item;
+  ss << ";";
+
+  ss << use_int8_;
+  for (auto &item : int8_enabled_op_types_) ss << item;
   ss << ";";
 
   ss << model_from_memory_;
