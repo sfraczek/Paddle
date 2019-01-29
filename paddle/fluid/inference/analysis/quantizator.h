@@ -25,20 +25,26 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include "paddle/fluid/framework/lod_tensor.h"
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/scope.h"
+#include "paddle/fluid/inference/api/paddle_quantize_config.h"
 
 namespace paddle {
 namespace inference {
 namespace analysis {
 
+using contrib::QuantizeConfig;
+using framework::NaiveExecutor;
+using framework::Scope;
+
 class Quantizator final {
  public:
-  explicit Quantizator(std::unique_ptr<NaiveExecutor>& executor,
+  explicit Quantizator(std::unique_ptr<framework::NaiveExecutor>& executor,
                        std::shared_ptr<framework::Scope>& scope,
                        std::shared_ptr<framework::ProgramDesc>& infer_program,
-                       std::shared_ptr<QuantizeConfig>& config)
+                       const std::shared_ptr<QuantizeConfig>& config)
       : executor_(executor),
         scope_(scope),
         infer_program_(infer_program),
@@ -49,7 +55,8 @@ class Quantizator final {
  private:
   bool RunWarmup();
   bool GatherData();
-  bool CalculateScales();
+  bool CalculateScales(std::string op_name, std::string conn_name,
+                       std::string var_name, LoDTensor& lod_tensor);
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
@@ -58,9 +65,10 @@ class Quantizator final {
   std::unique_ptr<framework::NaiveExecutor>& executor_;
   std::shared_ptr<framework::Scope>& scope_;
   std::shared_ptr<framework::ProgramDesc>& infer_program_;
-  std::shared_ptr<QuantizeConfig>& config_;
+  const std::shared_ptr<contrib::QuantizeConfig>& config_;
 
-  std::map<std::string, LoDTensor> scales;
+  // variable name -> data
+  std::map<std::string, framework::LoDTensor> scales;
 };
 
 }  // namespace analysis

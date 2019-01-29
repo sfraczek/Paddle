@@ -61,6 +61,7 @@ struct QuantizeConfig {
   std::map<std::string, std::map<std::string, QuantizeAlgorithm>> rules_;
   std::unordered_set<std::string> quantize_enabled_op_types_;
   std::shared_ptr<std::vector<PaddleTensor>> quant_warmup_data_;
+  int warmup_bs{0};
 };
 
 }  // namespace contrib

@@ -33,10 +33,6 @@ bool Quantizator::RunWarmup() {
   // Run the inference program
   executor_->Run();
 
-  // if (!GetQuantVars(quant_vars)) {
-  // LOG(ERROR) << "fail to get quant variables";
-  // return false;
-  // }
   return true;
 }
 
@@ -49,6 +45,7 @@ bool Quantizator::GatherData() {
       std::vector<std::string> output_var_names = op->OutputVars();
       for (auto &var_name : input_var_names) {
         LoDTensor lod_tensor = framework::GetVariableTensor(var_name);
+        CalculateScales(...);
 
         //...
       }
@@ -56,7 +53,8 @@ bool Quantizator::GatherData() {
   }
 }
 
-bool Quantizator::CalculateScales() {
+bool Quantizator::CalculateScales(std::string op_name, std::string conn_name,
+                                  std::string var_name, LoDTensor &lod_tensor) {
   // returns a map of cale values
   // keys: variable names
   // values: LoDTensors
