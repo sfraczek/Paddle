@@ -26,6 +26,7 @@
 #include "paddle/fluid/framework/scope.h"
 #include "paddle/fluid/framework/var_type_traits.h"
 #include "paddle/fluid/inference/analysis/passes/memory_optimize_pass.h"
+#include "paddle/fluid/inference/analysis/quantizator.h"
 #include "paddle/fluid/inference/api/helper.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_inference_pass.h"
@@ -44,6 +45,7 @@ DECLARE_bool(profile);
 namespace paddle {
 
 using contrib::AnalysisConfig;
+using inference::analysis::Quantizator;
 
 namespace {
 bool IsPersistable(const framework::VarDesc *var) {
@@ -90,30 +92,21 @@ bool AnalysisPredictor::Init(
   PrepareFeedFetch();
 
   // Get data from the variables that must be quantized
-  if (!PrepareQuantData()) {
+  if (!PrepareQuantize()) {
     return false;
   }
 
   return true;
 }
 
-bool AnalysisPredictor::PrepareQuantData() {
-  if (config_.int8_enabled()) {
-    auto gather_pass = framework::ir::PassRegistry::Instance().Get(
-        "quant_gather_var_names_pass");
-    const auto &qvars_names =
-        gather_pass->Get<std::unordered_set<std::string>>("quant_var_names");
-    std::cout << "Length of the names set: " << qvars_names.size() << std::endl;
-    // a vector for variables to be quantized
-    // std::unique_ptr<std::map<std::string, PaddleTensor>> q_vars(
-    // new std::vector<PaddleTensor>());
-    // run 1 iteration of inference
-    // RunQuantWarmup(q_vars);
-    // store the data in the int8_scale_pass
-    // auto pass =
-    // framework::ir::PassRegistry::Instance().Get("quant_scale_pass");
-    // pass->Set("quant_vars_data", std::move(q_vars));
+bool AnalysisPredictor::PrepareQuantize() {
+  if (config_.quantization_enabled()) {
+    // initialize quantizator
+    quantizator_.reset(new Quantizator(executor_, scope_, inference_program_));
+    // do the quantization
+    if (!quantizator_->Quantize()) return false;
   }
+
   return true;
 }
 
@@ -145,12 +138,14 @@ bool AnalysisPredictor::PrepareProgram(
       status_ir_optim_enabled_ = true;
       OptimizeInferenceProgram();
     } else {
-      // If the parent_scope is passed, we assert that the persistable variables
+      // If the parent_scope is passed, we assert that the persistable
+      // variables
       // are already created, so just create the no persistable variables.
 
       // If not cloned, the parameters should be loaded
       // OptimizeInferenceProgram.
-      // So in both cases, just the local variables are needed to load, not the
+      // So in both cases, just the local variables are needed to load, not
+      // the
       // parematers.
       executor_->CreateVariables(*inference_program_, 0, true, sub_scope_);
 
@@ -227,33 +222,13 @@ bool AnalysisPredictor::Run(const std::vector<PaddleTensor> &inputs,
 
   // All the containers in the scope will be hold in inference, but the
   // operators assume that the container will be reset after each batch.
-  // Here is a bugfix, collect all the container variables, and reset then to a
-  // bool; the next time, the operator will call MutableData and construct a new
+  // Here is a bugfix, collect all the container variables, and reset then to
+  // a
+  // bool; the next time, the operator will call MutableData and construct a
+  // new
   // container again, so that the container will be empty for each batch.
   tensor_array_batch_cleaner_.CollectNoTensorVars(sub_scope_);
   tensor_array_batch_cleaner_.ResetNoTensorVars();
-  return true;
-}
-
-bool AnalysisPredictor::RunQuantWarmup(
-    std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
-  VLOG(3) << "Predictor: run a quantization warmup iteration";
-  PADDLE_ENFORCE_NOT_NULL(config_.quant_warmup_data_,
-                          "Warmup data cannot be NULL in the config.");
-  framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
-
-  if (!SetFeed(*config_.quant_warmup_data_, scope)) {
-    LOG(ERROR) << "fail to set feed for warmup iteration";
-    return false;
-  }
-
-  // Run the inference program
-  executor_->Run();
-
-  if (!GetQuantVars(quant_vars)) {
-    LOG(ERROR) << "fail to get quant variables";
-    return false;
-  }
   return true;
 }
 
@@ -332,7 +307,8 @@ void AnalysisPredictor::GetFetchOne(const framework::LoDTensor &fetch,
   const T *data = fetch.data<T>();
   int num_elems = inference::VecReduceToInt(shape);
   output->data.Resize(num_elems * sizeof(T));
-  // The fetched tensor output by fetch op, should always in CPU memory, so just
+  // The fetched tensor output by fetch op, should always in CPU memory, so
+  // just
   // copy.
   memcpy(output->data.data(), data, num_elems * sizeof(T));
   // set lod
@@ -370,7 +346,8 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
 bool AnalysisPredictor::GetQuantVars(
     std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
   framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
-  // go through all the quantized operators and gather all the inputs, outputs,
+  // go through all the quantized operators and gather all the inputs,
+  // outputs,
   // weights and biases
   for (size_t i = 0; i < 10; ++i) {
     std::string qvar_name = "aaa";
@@ -468,8 +445,8 @@ std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<
       LOG(ERROR)
           << "Allocate too much memory for the GPU memory pool, assigned "
           << config.memory_pool_init_size_mb() << " MB";
-      LOG(ERROR)
-          << "Try to shink the value by setting AnalysisConfig::EnableGpu(...)";
+      LOG(ERROR) << "Try to shink the value by setting "
+                    "AnalysisConfig::EnableGpu(...)";
     }
 
     if (fraction_of_gpu_memory >= 0.0f || fraction_of_gpu_memory <= 0.95f) {

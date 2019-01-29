@@ -19,6 +19,7 @@
 #include <vector>
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/inference/analysis/analyzer.h"
+#include "paddle/fluid/inference/analysis/quantizator.h"
 #include "paddle/fluid/inference/api/api_impl.h"
 #include "paddle/fluid/inference/api/details/reset_tensor_array.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
@@ -85,7 +86,7 @@ class AnalysisPredictor : public PaddlePredictor {
   bool PrepareScope(const std::shared_ptr<framework::Scope> &parent_scope);
   bool CreateExecutor();
   bool PrepareExecutor();
-  bool PrepareQuantData();
+  bool PrepareQuantize();
 
   bool LoadProgramDesc();
   bool LoadParameters();
@@ -128,6 +129,7 @@ class AnalysisPredictor : public PaddlePredictor {
   details::TensorArrayBatchCleaner tensor_array_batch_cleaner_;
   // A mutex help to make Clone thread safe.
   std::mutex clone_mutex_;
+  std::shared_ptr<Quantizator> quantizator_;
 
   // For memory optimization.
   const size_t max_shape_collect_count_{1000};

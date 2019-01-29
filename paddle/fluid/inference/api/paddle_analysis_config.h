@@ -25,6 +25,7 @@
 // the abstract path of this header file will be changed.
 #include "paddle_api.h"           // NOLINT
 #include "paddle_pass_builder.h"  // NOLINT
+#include "paddle_quantize_config.h"
 
 namespace paddle {
 
@@ -151,13 +152,6 @@ struct AnalysisConfig {
    */
   bool mkldnn_enabled() const { return use_mkldnn_; }
 
-  /** Turn on INT8.
-   */
-  void EnableInt8();
-  /** A boolean state telling whether to use INT8 kernels.
-   */
-  bool int8_enabled() const { return use_int8_; }
-
   /** Set and get the number of cpu math library threads.
    */
   void SetCpuMathLibraryNumThreads(int cpu_math_library_num_threads);
@@ -187,18 +181,20 @@ struct AnalysisConfig {
     mkldnn_enabled_op_types_ = op_list;
   }
 
-  /** Specify the operator type list to use INT8 kernel.
-   * @param op_list the operator type list.
+  /** Turn on quantization.
    */
-  void SetInt8Op(std::unordered_set<std::string> op_list) {
-    int8_enabled_op_types_ = op_list;
+  void EnableQuantization() {
+    if (!quant_config_) quant_config_.reset(new QuantizeConfig());
   }
 
-  void SetQuantWarmupData(std::vector<PaddleTensor>* data) {
-    quant_warmup_data_ = data;
-  }
+  /** A boolean state telling whether the quantization is enabled.
+   */
+  bool quantization_enabled() const { return quantize_; }
 
-  std::vector<PaddleTensor>* GetQuantWarmupData() { return quant_warmup_data_; }
+  std::shared_ptr<QuantizeConfig> GetQuantizeConfig() {
+    if (!quant_config_) EnableQuantization();
+    return quant_config_;
+  }
 
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.
@@ -266,9 +262,8 @@ struct AnalysisConfig {
   bool use_mkldnn_{false};
   std::unordered_set<std::string> mkldnn_enabled_op_types_;
 
-  bool use_int8_{false};
-  std::unordered_set<std::string> int8_enabled_op_types_;
-  std::vector<PaddleTensor>* quant_warmup_data_;
+  bool quantize_{false};
+  std::shared_ptr<QuantizeConfig> quant_config_;
 
   bool model_from_memory_{false};
 
