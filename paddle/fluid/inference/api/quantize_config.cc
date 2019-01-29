@@ -17,10 +17,10 @@
 namespace paddle {
 
 contrib::QuantizeConfig::QuantizeConfig() {
-  rules_["conv"]["Input"] = naive;
-  rules_["conv"]["Filters"] = KL;
-  // conv bias's scale is calculated from Filters and Input scales
-  rules_["pool"]["Input"] = naive;
+  rules_["conv2d"]["Input"] = minmax;
+  rules_["conv2d"]["Filters"] = KL;
+  rules_["conv2d"]["Bias"] = none;  // do not calculate scale for biases
+  rules_["pool2d"]["Input"] = minmax;
 }
 
 }  // namespace paddle

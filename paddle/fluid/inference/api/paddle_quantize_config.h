@@ -27,8 +27,7 @@ namespace contrib {
 
 enum QuantizeAlgorithm {
   none,
-  naive,
-  moving_avg,
+  minmax,
   KL,
 };
 

@@ -53,23 +53,29 @@ bool Quantizator::GatherData() {
   }
 }
 
-bool Quantizator::CalculateScales(std::string op_name, std::string conn_name,
+void Quantizator::CalculateScales(std::string op_name, std::string conn_name,
                                   std::string var_name, LoDTensor &lod_tensor) {
-  // returns a map of cale values
-  // keys: variable names
-  // values: LoDTensors
+  // adds pairs variable name -> LoDTensor with scale to the scales map
 }
 
 bool Quantizator::RunQuantizePass() {
+  // push the scales to the quantize pass
+  auto quantize_pass =
+      framework::ir::PassRegistry::Instance().Get("quantize_pass");
+  quantize_pass->Set<std::map<std::string, LoDTensor *>>("quant_var_names",
+                                                         scales_);
   //
+  return true;
 }
 
 bool Quantizator::RunOptimizePass() {
   //
+  return true;
 }
 
 bool Quantizator::SaveModel() {
   //
+  return true;
 }
 
 bool Quantizator::Quantize() {

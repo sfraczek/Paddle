@@ -55,7 +55,7 @@ class Quantizator final {
  private:
   bool RunWarmup();
   bool GatherData();
-  bool CalculateScales(std::string op_name, std::string conn_name,
+  void CalculateScales(std::string op_name, std::string conn_name,
                        std::string var_name, LoDTensor& lod_tensor);
   bool RunQuantizePass();
   bool RunOptimizePass();
@@ -68,7 +68,7 @@ class Quantizator final {
   const std::shared_ptr<contrib::QuantizeConfig>& config_;
 
   // variable name -> data
-  std::map<std::string, framework::LoDTensor> scales;
+  std::map<std::string, framework::LoDTensor*> scales_;
 };
 
 }  // namespace analysis
