@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "paddle/fluid/inference/analysis/quantizator.h"
+#include <algorithm>
 
 namespace paddle {
 namespace inference {
@@ -56,6 +57,28 @@ bool Quantizator::GatherData() {
 void Quantizator::CalculateScales(std::string op_name, std::string conn_name,
                                   std::string var_name, LoDTensor &lod_tensor) {
   // adds pairs variable name -> LoDTensor with scale to the scales map
+
+  using contrib::QuantizeAlgorithm;
+  using framework::CPUPlace;
+
+  LoDTensor scale_tensor;
+  scale_tensor.Resize(1);
+  // auto *tensor_ptr = scale_tensor.mutable_data<float>(CPUPlace);
+  auto eigen_tensor = EigenVector<float>::From(scale_tensor);
+
+  auto &rule = config_->rules_[op_name][conn_name];
+  switch (rule) {
+    case QuantizeAlgorithm::none:
+      return;
+    case QuantizeAlgorithm::minmax:
+      max_value = eigen_tensor.lpNorm<Eigen::Infinity>();
+      break;
+    case QuantizeAlgorithm::KL:
+      break;
+    default:
+      throw std::runtime_error("Unknown QuantizeAlgorithm for quantization.");
+  }
+  scales[var_name] = std::move(scale_tensor);
 }
 
 bool Quantizator::RunQuantizePass() {

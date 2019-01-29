@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,7 +30,6 @@
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/scope.h"
-#include "paddle/fluid/inference/api/paddle_quantize_config.h"
 
 namespace paddle {
 namespace inference {
@@ -41,10 +41,11 @@ using framework::Scope;
 
 class Quantizator final {
  public:
-  explicit Quantizator(std::unique_ptr<framework::NaiveExecutor>& executor,
-                       std::shared_ptr<framework::Scope>& scope,
-                       std::shared_ptr<framework::ProgramDesc>& infer_program,
-                       const std::shared_ptr<QuantizeConfig>& config)
+  explicit Quantizator(
+      const std::unique_ptr<NaiveExecutor>& executor,
+      const std::shared_ptr<framework::Scope>& scope,
+      const std::shared_ptr<framework::ProgramDesc>& infer_program,
+      const std::shared_ptr<QuantizeConfig>& config)
       : executor_(executor),
         scope_(scope),
         infer_program_(infer_program),
