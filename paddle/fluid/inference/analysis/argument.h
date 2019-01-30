@@ -124,7 +124,7 @@ struct Argument {
                       std::unordered_set<std::string>);
 
   // A set of op types to enable their INT8 kernels
-  DECL_ARGUMENT_FIELD(int8_enabled_op_types, Int8EnabledOpTypes,
+  DECL_ARGUMENT_FIELD(quantize_enabled_op_types, QuantEnabledOpTypes,
                       std::unordered_set<std::string>);
 
   // Names of variables to be quantized

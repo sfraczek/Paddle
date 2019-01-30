@@ -183,18 +183,13 @@ struct AnalysisConfig {
 
   /** Turn on quantization.
    */
-  void EnableQuantization() {
-    if (!quant_config_) quant_config_.reset(new QuantizeConfig());
-  }
+  void EnableQuantize();
 
   /** A boolean state telling whether the quantization is enabled.
    */
   bool quantization_enabled() const { return quantize_; }
 
-  std::shared_ptr<QuantizeConfig> GetQuantizeConfig() {
-    if (!quant_config_) EnableQuantization();
-    return quant_config_;
-  }
+  std::shared_ptr<QuantizeConfig> GetQuantizeConfig();
 
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.
@@ -263,7 +258,7 @@ struct AnalysisConfig {
   std::unordered_set<std::string> mkldnn_enabled_op_types_;
 
   bool quantize_{false};
-  std::shared_ptr<QuantizeConfig> quant_config_;
+  std::shared_ptr<QuantizeConfig> quantize_config_;
 
   bool model_from_memory_{false};
 

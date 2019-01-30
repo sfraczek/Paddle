@@ -66,7 +66,7 @@ void GpuPassStrategy::EnableMKLDNN() {
   LOG(ERROR) << "GPU not support MKLDNN yet";
 }
 
-void GpuPassStrategy::EnableQuant() {
+void GpuPassStrategy::EnableQuantize() {
   LOG(ERROR) << "GPU not support quantization yet";
 }
 

@@ -22,6 +22,7 @@
 
 #pragma once
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -29,26 +30,34 @@
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/scope.h"
+#include "paddle/fluid/inference/api/paddle_api.h"
 #include "paddle/fluid/inference/api/paddle_quantize_config.h"
 
 namespace paddle {
 namespace inference {
 namespace analysis {
 
-using contrib::QuantizeConfig;
 using framework::NaiveExecutor;
 using framework::Scope;
+using framework::ProgramDesc;
+using framework::LoDTensor;
+using contrib::QuantizeConfig;
+
+typedef std::function<bool(const std::vector<PaddleTensor>& inputs,
+                           std::vector<PaddleTensor>* output_data,
+                           int batch_size)>
+    PredictorRun;
 
 class Quantizator final {
  public:
-  explicit Quantizator(std::unique_ptr<framework::NaiveExecutor>& executor,
-                       std::shared_ptr<framework::Scope>& scope,
-                       std::shared_ptr<framework::ProgramDesc>& infer_program,
-                       const std::shared_ptr<QuantizeConfig>& config)
-      : executor_(executor),
-        scope_(scope),
+  explicit Quantizator(Scope* scope,
+                       std::shared_ptr<ProgramDesc>& infer_program,
+                       const std::shared_ptr<QuantizeConfig>& config,
+                       PredictorRun predictor_run)
+      : scope_(scope),
         infer_program_(infer_program),
-        config_(config) {}
+        config_(config),
+        predictor_run_(predictor_run) {}
 
   bool Quantize();
 
@@ -56,16 +65,16 @@ class Quantizator final {
   bool RunWarmup();
   bool GatherData();
   void CalculateScales(std::string op_name, std::string conn_name,
-                       std::string var_name, LoDTensor& lod_tensor);
+                       std::string var_name, LoDTensor& var_tensor);
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
 
  private:
-  std::unique_ptr<framework::NaiveExecutor>& executor_;
-  std::shared_ptr<framework::Scope>& scope_;
-  std::shared_ptr<framework::ProgramDesc>& infer_program_;
-  const std::shared_ptr<contrib::QuantizeConfig>& config_;
+  Scope* scope_;
+  std::shared_ptr<ProgramDesc>& infer_program_;
+  const std::shared_ptr<QuantizeConfig>& config_;
+  PredictorRun predictor_run_;
 
   // variable name -> data
   std::map<std::string, framework::LoDTensor*> scales_;

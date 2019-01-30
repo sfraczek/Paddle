@@ -13,6 +13,10 @@
 // limitations under the License.
 
 #include "paddle/fluid/inference/analysis/quantizator.h"
+#include <map>
+#include "paddle/fluid/framework/ir/pass.h"
+#include "paddle/fluid/framework/operator.h"
+#include "paddle/fluid/framework/type_defs.h"
 
 namespace paddle {
 namespace inference {
@@ -21,36 +25,45 @@ namespace analysis {
 bool Quantizator::RunWarmup() {
   // std::unique_ptr<std::map<std::string, PaddleTensor>> & quant_vars) {
   VLOG(3) << "Predictor: run a quantization warmup iteration";
-  PADDLE_ENFORCE_NOT_NULL(config_.GetQuantWarmupData(),
-                          "Warmup data cannot be NULL in the config.");
-  framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
+  auto warmup_data = config_->GetQuantWarmupData();
 
-  if (!SetFeed(*config_.quant_warmup_data_, scope)) {
-    LOG(ERROR) << "fail to set feed for warmup iteration";
-    return false;
-  }
+  PADDLE_ENFORCE_NOT_NULL(warmup_data,
+                          "Warmup data cannot be NULL in the config.");
+
+  std::vector<PaddleTensor> output_slots;
 
   // Run the inference program
-  executor_->Run();
+  predictor_run_(*warmup_data.get(), &output_slots,
+                 config_->GetWarmupBatchSize());
 
   return true;
 }
 
 bool Quantizator::GatherData() {
-  // op_name, var_name
-  std::map<std::string, std::map<std::string, LoDTensor>> data;
-  for (auto *op : inference_program_->Block(0).AllOps()) {
-    if (op->HasAttr("quantize") && op->Attr<bool>("quantize")) {
-      std::vector<std::string> input_var_names = op->InputVars();
-      std::vector<std::string> output_var_names = op->OutputVars();
-      for (auto &var_name : input_var_names) {
-        LoDTensor lod_tensor = framework::GetVariableTensor(var_name);
-        CalculateScales(...);
-
-        //...
-      }
-    }
-  }
+  /*
+   *   std::map<std::string, std::map<std::string, LoDTensor>> gathered_data;
+   *   for (auto *op : infer_program_->Block(0).AllOps()) {
+   *     if (op->HasAttr("quantize") && op->Attr<bool>("quantize")) {
+   *       const VariableNameMap &connections = op->Inputs();
+   *       const VariableNameMap &connections_out = op->Outputs();
+   *       connections.insert(connections.end(), connections_out.begin(),
+   *                          connections_out.end());
+   *
+   *       for (auto &conn_name : connections) {
+   *         Variable *var = scope_.FindVar(var_name);
+   *         PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
+   *         PADDLE_ENFORCE(var->IsType<LoDTensor>(),
+   *                        "Only support lod tensor now.");
+   *         LoDTensor *var_tensor = var->GetMutable<LoDTensor>();
+   *
+   *         CalculateScales(...);
+   *
+   *         //...
+   *       }
+   *     }
+   *   }
+   */
+  return true;
 }
 
 void Quantizator::CalculateScales(std::string op_name, std::string conn_name,
@@ -63,7 +76,7 @@ bool Quantizator::RunQuantizePass() {
   auto quantize_pass =
       framework::ir::PassRegistry::Instance().Get("quantize_pass");
   quantize_pass->Set<std::map<std::string, LoDTensor *>>("quant_var_names",
-                                                         scales_);
+                                                         &scales_);
   //
   return true;
 }
@@ -81,10 +94,8 @@ bool Quantizator::SaveModel() {
 bool Quantizator::Quantize() {
   // warmup iteration
   if (!RunWarmup()) return false;
-  // gather data from variables
+  // gather data from variables and calculate scales for them
   if (!GatherData()) return false;
-  // calculate scales
-  if (!CalculateScales()) return false;
   // run quantization pass
   // run optimization passes
   // save quantized model if required

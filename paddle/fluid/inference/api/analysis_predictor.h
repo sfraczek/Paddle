@@ -91,9 +91,6 @@ class AnalysisPredictor : public PaddlePredictor {
   bool LoadProgramDesc();
   bool LoadParameters();
 
-  bool RunQuantWarmup(
-      std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars);
-
   bool SetFeed(const std::vector<PaddleTensor> &input_datas,
                framework::Scope *scope);
   bool GetFetch(std::vector<PaddleTensor> *output_data,
@@ -129,7 +126,7 @@ class AnalysisPredictor : public PaddlePredictor {
   details::TensorArrayBatchCleaner tensor_array_batch_cleaner_;
   // A mutex help to make Clone thread safe.
   std::mutex clone_mutex_;
-  std::shared_ptr<Quantizator> quantizator_;
+  std::shared_ptr<inference::analysis::Quantizator> quantizator_;
 
   // For memory optimization.
   const size_t max_shape_collect_count_{1000};

@@ -86,7 +86,7 @@ class PassStrategy : public PaddlePassBuilder {
 
   /** Enable quantize optimization
    */
-  virtual void EnableQuant() {}
+  virtual void EnableQuantize() {}
 
   bool use_gpu() const { return use_gpu_; }
 
@@ -151,17 +151,15 @@ class CpuPassStrategy : public PassStrategy {
 #endif
   }
 
-  // Only INT8 quantization is supported now
-  void EnableQuant() override {
-    if (!use_int8_) {
-      passes_.push_back("int8_placement_pass");
-      passes_.push_back("quant_gather_var_names_pass");
+  void EnableQuantize() override {
+    if (!quantize_) {
+      passes_.push_back("cpu_quantize_placement_pass");
     }
-    use_int8_ = true;
+    quantize_ = true;
   }
 
  protected:
-  bool use_int8_{false};
+  bool quantize_{false};
 };
 
 /** The GPU passes strategy, it is used in AnalysisPredictor with GPU mode.
@@ -195,7 +193,7 @@ class GpuPassStrategy : public PassStrategy {
   }
 
   void EnableMKLDNN() override;
-  void EnableQuant() override;
+  void EnableQuantize() override;
 
   virtual ~GpuPassStrategy() = default;
 };

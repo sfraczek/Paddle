@@ -54,6 +54,11 @@ struct QuantizeConfig {
     return quant_warmup_data_;
   }
 
+  int GetWarmupBatchSize() { return warmup_bs; }
+  const std::unordered_set<std::string>& GetQuantizeEnabledOpTypes() {
+    return quantize_enabled_op_types_;
+  }
+
   friend struct AnalysisConfig;
 
  protected:

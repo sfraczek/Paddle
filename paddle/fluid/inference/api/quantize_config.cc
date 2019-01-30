@@ -20,6 +20,8 @@ contrib::QuantizeConfig::QuantizeConfig() {
   rules_["conv2d"]["Input"] = minmax;
   rules_["conv2d"]["Filters"] = KL;
   rules_["conv2d"]["Bias"] = none;  // do not calculate scale for biases
+  rules_["conv2d"]["Output"] = minmax;
+
   rules_["pool2d"]["Input"] = minmax;
 }
 

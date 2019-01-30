@@ -17,6 +17,7 @@
 #include "paddle/fluid/inference/api/paddle_analysis_config.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_pass_builder.h"
+#include "paddle/fluid/inference/api/paddle_quantize_config.h"
 #include "paddle/fluid/platform/enforce.h"
 #include "paddle/fluid/platform/gpu_info.h"
 
@@ -104,10 +105,9 @@ contrib::AnalysisConfig::AnalysisConfig(const contrib::AnalysisConfig &other) {
   // MKLDNN related.
   CP_MEMBER(use_mkldnn_);
   CP_MEMBER(mkldnn_enabled_op_types_);
-  // INT8 related.
-  CP_MEMBER(use_int8_);
-  CP_MEMBER(int8_enabled_op_types_);
-  CP_MEMBER(quant_warmup_data_);
+  // Quantization related.
+  CP_MEMBER(quantize_);
+  CP_MEMBER(quantize_config_);
 
   // Ir related.
   CP_MEMBER(enable_ir_optim_);
@@ -144,9 +144,17 @@ void contrib::AnalysisConfig::EnableMKLDNN() {
   Update();
 }
 
-void contrib::AnalysisConfig::EnableInt8() {
-  use_int8_ = true;
+void contrib::AnalysisConfig::EnableQuantize() {
+  quantize_ = true;
+  if (!quantize_config_) quantize_config_.reset(new contrib::QuantizeConfig());
+
   Update();
+}
+
+std::shared_ptr<contrib::QuantizeConfig>
+contrib::AnalysisConfig::GetQuantizeConfig() {
+  if (!quantize_config_) EnableQuantize();
+  return quantize_config_;
 }
 
 void contrib::AnalysisConfig::EnableTensorRtEngine(int workspace_size,
@@ -222,13 +230,14 @@ void contrib::AnalysisConfig::Update() {
 #endif
   }
 
-  // INT8 quantization passes must come after all other optimization passes
-  if (use_int8_) {
+  // Quantization passes must come after all other optimization passes
+  if (quantize_) {
     if (!enable_ir_optim_) {
-      LOG(ERROR) << "EnableInt8() only works when IR optimization is enabled.";
+      LOG(ERROR)
+          << "EnableQuantize() only works when IR optimization is enabled.";
     }
-    pass_builder_->EnableQuant();
-    use_int8_ = true;
+    pass_builder_->EnableQuantize();
+    quantize_ = true;
   }
 
   if (enable_memory_optim_) {
@@ -262,9 +271,8 @@ std::string contrib::AnalysisConfig::SerializeInfoCache() {
   for (auto &item : mkldnn_enabled_op_types_) ss << item;
   ss << ";";
 
-  ss << use_int8_;
-  for (auto &item : int8_enabled_op_types_) ss << item;
-  ss << ";";
+  ss << quantize_;
+  // TODO(wojtuss): handle QuantizeConfig
 
   ss << model_from_memory_;
 

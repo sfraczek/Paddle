@@ -15,6 +15,7 @@
 #include "paddle/fluid/inference/api/analysis_predictor.h"
 #include <glog/logging.h>
 #include <algorithm>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -101,8 +102,13 @@ bool AnalysisPredictor::Init(
 
 bool AnalysisPredictor::PrepareQuantize() {
   if (config_.quantization_enabled()) {
+    auto predictor_run =
+        std::bind(&AnalysisPredictor::Run, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3);
+    framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
     // initialize quantizator
-    quantizator_.reset(new Quantizator(executor_, scope_, inference_program_));
+    quantizator_.reset(new Quantizator(
+        scope, inference_program_, config_.quantize_config_, predictor_run));
     // do the quantization
     if (!quantizator_->Quantize()) return false;
   }
@@ -406,9 +412,10 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
     argument_.SetMKLDNNEnabledOpTypes(config_.mkldnn_enabled_op_types_);
   }
 
-  if (config_.use_int8_) {
-    LOG(INFO) << "INT8 optimization is enabled";
-    argument_.SetInt8EnabledOpTypes(config_.int8_enabled_op_types_);
+  if (config_.quantize_) {
+    LOG(INFO) << "quantization is enabled";
+    argument_.SetQuantEnabledOpTypes(
+        config_.GetQuantizeConfig()->GetQuantizeEnabledOpTypes());
   }
 
   auto passes = config_.pass_builder()->AllPasses();

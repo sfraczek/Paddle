@@ -12,27 +12,27 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
-#include "paddle/fluid/framework/ir/int8_placement_pass.h"
+#include "paddle/fluid/framework/ir/cpu_quantize_placement_pass.h"
 #include <string>
 
 namespace paddle {
 namespace framework {
 namespace ir {
 
-std::unique_ptr<ir::Graph> INT8PlacementPass::ApplyImpl(
+std::unique_ptr<ir::Graph> CPUQuantizePlacementPass::ApplyImpl(
     std::unique_ptr<ir::Graph> graph) const {
-  VLOG(3) << "Aplies INT8 placement strategy.";
+  VLOG(3) << "Aplies CPU quantization placement strategy.";
   const auto& op_types_list =
-      Get<std::unordered_set<std::string>>("int8_enabled_op_types");
+      Get<std::unordered_set<std::string>>("quant_enabled_op_types");
   for (const Node* n : graph->Nodes()) {
     if (n->IsOp()) {
       auto* op = n->Op();
-      if (op->HasAttr("use_int8") || op->HasProtoAttr("use_int8")) {
+      if (op->HasAttr("quantize") || op->HasProtoAttr("quantize")) {
         if (op_types_list.empty()) {
-          op->SetAttr("use_int8", true);
+          op->SetAttr("quantize", true);
         } else if (std::find(op_types_list.begin(), op_types_list.end(),
                              n->Name()) != op_types_list.end()) {
-          op->SetAttr("use_int8", true);
+          op->SetAttr("quantize", true);
         }
       }
     }
@@ -44,5 +44,6 @@ std::unique_ptr<ir::Graph> INT8PlacementPass::ApplyImpl(
 }  // namespace framework
 }  // namespace paddle
 
-REGISTER_PASS(int8_placement_pass, paddle::framework::ir::INT8PlacementPass)
-    .RequirePassAttr("int8_enabled_op_types");
+REGISTER_PASS(int8_placement_pass,
+              paddle::framework::ir::CPUQuantizePlacementPass)
+    .RequirePassAttr("quant_enabled_op_types");
