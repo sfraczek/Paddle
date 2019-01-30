@@ -20,6 +20,7 @@
 #include "paddle/fluid/framework/operator.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "paddle/fluid/platform/place.h"
+#include <tuple>
 
 namespace paddle {
 namespace inference {
@@ -101,6 +102,7 @@ void Quantizator::CalculateScales(const std::string& op_name,
       break;
     }
     case QuantizeAlgorithm::KL:
+      Quantizator::GetOptimalScalingFactor(eigen_data_vector);
       throw std::runtime_error(
           "Quantizator: QuantizeAlgorithm KL is not yet implemented.");
       break;
@@ -109,6 +111,72 @@ void Quantizator::CalculateScales(const std::string& op_name,
           "Quantizator: Unexpected QuantizeAlgorithm specified.");
   }
   scales_[var_name] = std::move(scale_tensor);
+}
+
+// Using the KL-divergence method get the most precise scaling factor.
+void Quantizator::GetOptimalScalingFactor(EigenVector activation_blob,
+                                          int num_quantized_bins = 255) {
+  float max_val = activation_blob.maxCoeff();
+  float min_val = activation_blob.minCoeff();
+  std::vector<int> hist;
+  float bin_width;
+  int starting_iter;
+  int ending_iter;
+  if (min_val >= 0) {
+    std::tie(hist, bin_width) =
+        Histogram(activation_blob, 2048, min_val, max_val);
+    ending_iter = 2047;
+    starting_iter = static_cast<int>(ending_iter * 0.7);
+  } else {
+    th = max(abs(max_val), abs(min_val));
+    std::tie(hist, bin_width) = Histogram(activation_blob, 2048, -th, th);
+    starting_iter = 0;
+    ending_iter = 2047;
+    if (abs(max_val) > abs(min_val)) {
+      while (starting_iter < ending_iter) {
+        if (hist[starting_iter] == 0) {
+          starting_iter += 1;
+          continue;
+        } else {
+          break;
+        }
+      }
+      starting_iter += static_cast<int>((ending_iter - starting_iter) * 0.6);
+    } else {
+      while (ending_iter > 0) {
+        if (hist[ending_iter] == 0) {
+          ending_iter -= 1;
+          continue;
+        } else {
+          break;
+        }
+      }
+      starting_iter = static_Cast<int>(0.6 * ending_iter);
+    }
+  }
+  auto P_sum = activation_blob.size();
+}
+
+// Returns histogram and bin width
+std::tuple<std::vector<int>, float> Quantizator::Histogram(
+    EigenVector<float> activation_blob, int num_bins = 2048, float min_val,
+    float max_val) {
+  auto bin_width = (max_val - min_val) / num_bins;
+  std::vector<int> hist(num_bins);
+  for (auto *val : activation_blob) {
+    int bin = static_cast<int>(floor((val - min_val) / bin_width));
+    hist[bin] = val;
+  }
+  return std::make_tuple(std::move(hist), std::move(bin_width));
+}
+
+void Quantizator::KLDivergence(refDistP, candidDistQ) {
+  // naive implementation for 8 bits
+  // collect historgram of activations
+  // generate many quantized distributions with different saturation thresholds
+  // pick threshold which minimizes KL divergence(reference_distribution,
+  // quantized_distribution)
+    outliersCount = sum(
 }
 
 bool Quantizator::RunQuantizePass() {
