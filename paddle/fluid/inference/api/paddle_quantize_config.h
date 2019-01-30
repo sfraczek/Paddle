@@ -59,6 +59,11 @@ struct QuantizeConfig {
     return quantize_enabled_op_types_;
   }
 
+  QuantizeAlgorithm GetRule(const std::string& op_name,
+                            const std::string& conn_name) {
+    return rules_[op_name][conn_name];
+  }
+
   friend struct AnalysisConfig;
 
  protected:

@@ -15,9 +15,11 @@
 #include "paddle/fluid/inference/analysis/quantizator.h"
 #include <algorithm>
 #include <map>
+#include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/ir/pass.h"
 #include "paddle/fluid/framework/operator.h"
 #include "paddle/fluid/framework/type_defs.h"
+#include "paddle/fluid/platform/place.h"
 
 namespace paddle {
 namespace inference {
@@ -67,31 +69,37 @@ bool Quantizator::GatherData() {
   return true;
 }
 
-void Quantizator::CalculateScales(std::string op_name, std::string conn_name,
-                                  std::string var_name, LoDTensor &lod_tensor,
-                                  float int_max_value) {
+void Quantizator::CalculateScales(const std::string& op_name,
+                                  const std::string& conn_name,
+                                  const std::string& var_name,
+                                  LoDTensor& lod_tensor, float int_max_value) {
   // adds pairs variable name -> LoDTensor with scale to the scales map
 
   using contrib::QuantizeAlgorithm;
-  using framework::CPUPlace;
+  using platform::CPUPlace;
+  using framework::EigenVector;
 
   LoDTensor scale_tensor;
-  scale_tensor.Resize(1);
+  scale_tensor.Resize({1});
   if (lod_tensor.numel() == 0)
     throw std::runtime_error(
         "Quantizator: LoDTensor of variable for quantization should not be "
         "empty.");
-  auto eigen_data_vector = EigenVector<float>::From(lod_tensor);
+  // TODO: fix me
+  // auto eigen_data_vector = EigenVector<float>::From(lod_tensor);
 
-  auto &rule = config_->rules_[op_name][conn_name];
+  auto rule = config_->GetRule(op_name, conn_name);
   switch (rule) {
     case QuantizeAlgorithm::none:
       return;
-    case QuantizeAlgorithm::minmax:
-      auto tensor_max_value = eigen_data_vector.lpNorm<Eigen::Infinity>();
+    case QuantizeAlgorithm::minmax: {
+      // TODO: fix me
+      // auto tensor_max_value = eigen_data_vector.lpNorm<Eigen::Infinity>();
+      auto tensor_max_value = 1;
       auto quantization_factor = int_max_value / tensor_max_value;
-      scale_tensor.mutable_data<float>(CPUPlace)[0] = quantization_factor;
+      scale_tensor.mutable_data<float>(CPUPlace())[0] = quantization_factor;
       break;
+    }
     case QuantizeAlgorithm::KL:
       throw std::runtime_error(
           "Quantizator: QuantizeAlgorithm KL is not yet implemented.");
@@ -100,15 +108,15 @@ void Quantizator::CalculateScales(std::string op_name, std::string conn_name,
       throw std::runtime_error(
           "Quantizator: Unexpected QuantizeAlgorithm specified.");
   }
-  scales[var_name] = std::move(scale_tensor);
+  scales_[var_name] = std::move(scale_tensor);
 }
 
 bool Quantizator::RunQuantizePass() {
   // push the scales to the quantize pass
   auto quantize_pass =
       framework::ir::PassRegistry::Instance().Get("quantize_pass");
-  quantize_pass->Set<std::map<std::string, LoDTensor *>>("quant_var_names",
-                                                         &scales_);
+  quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_names",
+                                                       &scales_);
   //
   return true;
 }
