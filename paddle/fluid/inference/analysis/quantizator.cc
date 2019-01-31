@@ -15,12 +15,13 @@
 #include "paddle/fluid/inference/analysis/quantizator.h"
 #include <algorithm>
 #include <map>
+#include <numeric>
+#include <tuple>
 #include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/ir/pass.h"
 #include "paddle/fluid/framework/operator.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "paddle/fluid/platform/place.h"
-#include <tuple>
 
 namespace paddle {
 namespace inference {
@@ -73,7 +74,8 @@ bool Quantizator::GatherData() {
 void Quantizator::CalculateScales(const std::string& op_name,
                                   const std::string& conn_name,
                                   const std::string& var_name,
-                                  LoDTensor& lod_tensor, float int_max_value) {
+                                  const LoDTensor& lod_tensor,
+                                  float int_max_value) {
   // adds pairs variable name -> LoDTensor with scale to the scales map
 
   using contrib::QuantizeAlgorithm;
@@ -82,27 +84,29 @@ void Quantizator::CalculateScales(const std::string& op_name,
 
   LoDTensor scale_tensor;
   scale_tensor.Resize({1});
+
   if (lod_tensor.numel() == 0)
     throw std::runtime_error(
         "Quantizator: LoDTensor of variable for quantization should not be "
         "empty.");
-  // TODO: fix me
-  // auto eigen_data_vector = EigenVector<float>::From(lod_tensor);
+  const float* lod_tensor_ptr = lod_tensor.data<float>();
 
   auto rule = config_->GetRule(op_name, conn_name);
   switch (rule) {
     case QuantizeAlgorithm::none:
       return;
     case QuantizeAlgorithm::minmax: {
-      // TODO: fix me
-      // auto tensor_max_value = eigen_data_vector.lpNorm<Eigen::Infinity>();
-      auto tensor_max_value = 1;
-      auto quantization_factor = int_max_value / tensor_max_value;
-      scale_tensor.mutable_data<float>(CPUPlace())[0] = quantization_factor;
+      float max_abs = abs(lod_tensor_ptr[0]);
+      for (int i = 1; i < lod_tensor.numel(); i++) {
+        max_abs = std::max(max_abs, std::abs(lod_tensor_ptr[i]));
+      }
+      float quantization_factor = static_cast<float>(int_max_value / max_abs);
+      auto* scale_ptr = scale_tensor.mutable_data<float>(CPUPlace());
+      scale_ptr[0] = quantization_factor;
       break;
     }
     case QuantizeAlgorithm::KL:
-      Quantizator::GetOptimalScalingFactor(eigen_data_vector);
+      // GetOptimalScalingFactor(eigen_data_vector);
       throw std::runtime_error(
           "Quantizator: QuantizeAlgorithm KL is not yet implemented.");
       break;
@@ -114,8 +118,8 @@ void Quantizator::CalculateScales(const std::string& op_name,
 }
 
 // Using the KL-divergence method get the most precise scaling factor.
-void Quantizator::GetOptimalScalingFactor(EigenVector activation_blob,
-                                          int num_quantized_bins = 255) {
+void Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
+                                          int num_quantized_bins) {
   float max_val = activation_blob.maxCoeff();
   float min_val = activation_blob.minCoeff();
   std::vector<int> hist;
@@ -124,11 +128,11 @@ void Quantizator::GetOptimalScalingFactor(EigenVector activation_blob,
   int ending_iter;
   if (min_val >= 0) {
     std::tie(hist, bin_width) =
-        Histogram(activation_blob, 2048, min_val, max_val);
+        Histogram(activation_blob, min_val, max_val, 2048);
     ending_iter = 2047;
     starting_iter = static_cast<int>(ending_iter * 0.7);
   } else {
-    th = max(abs(max_val), abs(min_val));
+    float th = std::max(abs(max_val), abs(min_val));
     std::tie(hist, bin_width) = Histogram(activation_blob, 2048, -th, th);
     starting_iter = 0;
     ending_iter = 2047;
@@ -151,33 +155,98 @@ void Quantizator::GetOptimalScalingFactor(EigenVector activation_blob,
           break;
         }
       }
-      starting_iter = static_Cast<int>(0.6 * ending_iter);
+      starting_iter = static_cast<int>(0.6 * ending_iter);
     }
   }
-  auto P_sum = activation_blob.size();
+  // auto P_sum = activation_blob.size();
+  // int min_kl_divergence = 0;
+  // int min_kl_index = 0;
+  // bool kl_inited = false;
+  for (int i = starting_iter; i <= ending_iter; i++) {
+    std::vector<int> reference_distr_P(&hist[0], &hist[i]);
+    auto outliers_count = std::accumulate(&hist[i], &hist[2048], 0);
+    if (reference_distr_P[i - 1] == 0) {
+      continue;
+    }
+    reference_distr_P[i - 1] += outliers_count;
+    auto reference_distr_bins = reference_distr_P;
+    std::vector<int> candidate_distr_Q(&hist[0], &hist[i]);
+    int num_merged_bins = i / num_quantized_bins;
+    std::vector<int> candidate_distr_Q_quantized(num_quantized_bins, 0);
+    int j_start = 0;
+    int j_end = num_merged_bins;
+    for (int idx = 0; idx < num_quantized_bins; idx++) {
+      candidate_distr_Q_quantized[idx] = std::accumulate(
+          &candidate_distr_Q[j_start], &candidate_distr_Q[j_end], 0);
+      j_start += num_merged_bins;
+      j_end += num_merged_bins;
+      if ((idx + 1) == num_quantized_bins - 1) {
+        j_end = i;
+      }
+    }
+    candidate_distr_Q =
+        ExpandQuantizedBins(candidate_distr_Q_quantized, reference_distr_bins);
+    // TODO(sfraczek): continue rewriting from
+  }
+}
+
+std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
+                                     std::vector<int> reference_bins) {
+  std::vector<int> expanded_quantized_bins(reference_bins.size(), 0);
+  int num_merged_bins = reference_bins.size() / quantized_bins.size();
+  int j_start = 0;
+  int j_end = num_merged_bins;
+  for (size_t idx = 0; idx < quantized_bins.size(); idx++) {
+    // auto zero_count = reference_bins[j_start:j_end].count(0);
+    int zero_count =
+        std::count(&reference_bins[j_start], &reference_bins[j_end], 0);
+    num_merged_bins = j_end - j_start;
+    int avg_bin_ele;
+    if (zero_count == num_merged_bins) {
+      avg_bin_ele = 0;
+    } else {
+      avg_bin_ele = quantized_bins[idx] / (num_merged_bins - zero_count + 0.0);
+    }
+    for (int idx1 = j_start; idx1 < j_end; idx1++) {
+      expanded_quantized_bins[idx1] =
+          (reference_bins[idx1] == 0) ? 0 : avg_bin_ele;
+    }
+    j_start += num_merged_bins;
+    j_end += num_merged_bins;
+    if ((idx + 1) == quantized_bins.size() - 1) {
+      j_end = reference_bins.size();
+    }
+  }
+  return expanded_quantized_bins;
 }
 
 // Returns histogram and bin width
 std::tuple<std::vector<int>, float> Quantizator::Histogram(
-    EigenVector<float> activation_blob, int num_bins = 2048, float min_val,
-    float max_val) {
+    EigenVectorArrayMap activation_blob, float min_val, float max_val,
+    int num_bins) {
   auto bin_width = (max_val - min_val) / num_bins;
   std::vector<int> hist(num_bins);
-  for (auto *val : activation_blob) {
-    int bin = static_cast<int>(floor((val - min_val) / bin_width));
-    hist[bin] = val;
+  // TODO(sfraczek): Try #pragma omp parallel for
+  for (int i = 0; i < activation_blob.size(); i++) {
+    int bin =
+        static_cast<int>(floor((activation_blob[i] - min_val) / bin_width));
+    hist[bin] = activation_blob[i];
   }
+  // TODO(sfraczek): Try the below
+  // auto bin_blob = (activation_blob - min_val) / bin_width
+  // for int (i = 0; i < bin_blob.size(); i++)
+  //   hist[bin_blob[i]]=activation_blob[i];
   return std::make_tuple(std::move(hist), std::move(bin_width));
 }
 
-void Quantizator::KLDivergence(refDistP, candidDistQ) {
-  // naive implementation for 8 bits
-  // collect historgram of activations
-  // generate many quantized distributions with different saturation thresholds
-  // pick threshold which minimizes KL divergence(reference_distribution,
-  // quantized_distribution)
-    outliersCount = sum(
-}
+// void Quantizator::KLDivergence(refDistP, candidDistQ) {
+// naive implementation for 8 bits
+// collect historgram of activations
+// generate many quantized distributions with different saturation thresholds
+// pick threshold which minimizes KL divergence(reference_distribution,
+// quantized_distribution)
+//     outliersCount = sum(
+// }
 
 bool Quantizator::RunQuantizePass() {
   // push the scales to the quantize pass

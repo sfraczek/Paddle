@@ -26,7 +26,9 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <tuple>
 #include <vector>
+#include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/lod_tensor.h"
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/framework/program_desc.h"
@@ -39,6 +41,7 @@ namespace inference {
 namespace analysis {
 
 using framework::NaiveExecutor;
+using EigenVectorArrayMap = Eigen::Map<Eigen::Array<float, Eigen::Dynamic, 1>>;
 using framework::Scope;
 using framework::ProgramDesc;
 using framework::LoDTensor;
@@ -52,7 +55,7 @@ typedef std::function<bool(const std::vector<PaddleTensor>& inputs,
 class Quantizator final {
  public:
   explicit Quantizator(Scope* scope,
-                       std::shared_ptr<ProgramDesc>& infer_program,
+                       const std::shared_ptr<ProgramDesc>& infer_program,
                        const std::shared_ptr<QuantizeConfig>& config,
                        PredictorRun predictor_run)
       : scope_(scope),
@@ -66,15 +69,22 @@ class Quantizator final {
   bool RunWarmup();
   bool GatherData();
   void CalculateScales(const std::string& op_name, const std::string& conn_name,
-                       const std::string& var_name, LoDTensor& var_tensor,
+                       const std::string& var_name, const LoDTensor& var_tensor,
                        float int_max_value);
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
+  void GetOptimalScalingFactor(EigenVectorArrayMap eigen_data_vector,
+                               int num_quantized_bins = 255);
+  std::tuple<std::vector<int>, float> Histogram(
+      EigenVectorArrayMap activation_blob, float min_val, float max_val,
+      int num_bins = 2048);
+  std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
+                                       std::vector<int> reference_bins);
 
  private:
   Scope* scope_;
-  std::shared_ptr<ProgramDesc>& infer_program_;
+  const std::shared_ptr<ProgramDesc>& infer_program_;
   const std::shared_ptr<QuantizeConfig>& config_;
   PredictorRun predictor_run_;
 
