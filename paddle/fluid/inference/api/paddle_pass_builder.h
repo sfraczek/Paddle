@@ -86,7 +86,7 @@ class PassStrategy : public PaddlePassBuilder {
 
   /** Enable quantize optimization
    */
-  virtual void EnableQuantize() {}
+  virtual void EnableQuantizer() {}
 
   bool use_gpu() const { return use_gpu_; }
 
@@ -151,9 +151,10 @@ class CpuPassStrategy : public PassStrategy {
 #endif
   }
 
-  void EnableQuantize() override {
+  void EnableQuantizer() override {
     if (!quantize_) {
       passes_.push_back("cpu_quantize_placement_pass");
+      // TODO(sfraczek): Add optimize_pass
     }
     quantize_ = true;
   }
@@ -193,7 +194,7 @@ class GpuPassStrategy : public PassStrategy {
   }
 
   void EnableMKLDNN() override;
-  void EnableQuantize() override;
+  void EnableQuantizer() override;
 
   virtual ~GpuPassStrategy() = default;
 };

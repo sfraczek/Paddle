@@ -34,7 +34,7 @@
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/scope.h"
 #include "paddle/fluid/inference/api/paddle_api.h"
-#include "paddle/fluid/inference/api/paddle_quantize_config.h"
+#include "paddle/fluid/inference/api/paddle_quantizer_config.h"
 
 namespace paddle {
 namespace inference {
@@ -48,7 +48,7 @@ using ConstEigenVectorArrayMap =
 using framework::Scope;
 using framework::ProgramDesc;
 using framework::LoDTensor;
-using contrib::QuantizeConfig;
+using contrib::QuantizerConfig;
 
 typedef std::function<bool(const std::vector<PaddleTensor>& inputs,
                            std::vector<PaddleTensor>* output_data,
@@ -59,7 +59,7 @@ class Quantizator final {
  public:
   explicit Quantizator(Scope* scope,
                        const std::shared_ptr<ProgramDesc>& infer_program,
-                       const std::shared_ptr<QuantizeConfig>& config,
+                       const std::shared_ptr<QuantizerConfig>& config,
                        PredictorRun predictor_run)
       : scope_(scope),
         infer_program_(infer_program),
@@ -92,7 +92,7 @@ class Quantizator final {
  private:
   Scope* scope_;
   const std::shared_ptr<ProgramDesc>& infer_program_;
-  const std::shared_ptr<QuantizeConfig>& config_;
+  const std::shared_ptr<QuantizerConfig>& config_;
   PredictorRun predictor_run_;
 
   // variable name -> data

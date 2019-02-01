@@ -30,7 +30,7 @@ namespace analysis {
 bool Quantizator::RunWarmup() {
   // std::unique_ptr<std::map<std::string, PaddleTensor>> & quant_vars) {
   VLOG(3) << "Predictor: run a quantization warmup iteration";
-  auto warmup_data = config_->GetQuantWarmupData();
+  auto warmup_data = config_->GetWarmupData();
 
   PADDLE_ENFORCE_NOT_NULL(warmup_data,
                           "Warmup data cannot be NULL in the config.");
@@ -91,7 +91,7 @@ void Quantizator::CalculateScales(const std::string& op_name,
         "Quantizator: LoDTensor of variable for quantization should not be "
         "empty.");
 
-  auto rule = config_->GetRule(op_name, conn_name);
+  auto rule = config_->GetScaleAlgo(op_name, conn_name);
   switch (rule) {
     case QuantizeAlgorithm::none:
       return;

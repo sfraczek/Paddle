@@ -18,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include "paddle/fluid/framework/feed_fetch_method.h"
 #include "paddle/fluid/framework/feed_fetch_type.h"
@@ -108,7 +109,7 @@ bool AnalysisPredictor::PrepareQuantize() {
     framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
     // initialize quantizator
     quantizator_.reset(new Quantizator(
-        scope, inference_program_, config_.quantize_config_, predictor_run));
+        scope, inference_program_, config_.quantizer_config_, predictor_run));
     // do the quantization
     if (!quantizator_->Quantize()) return false;
   }
@@ -415,7 +416,7 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
   if (config_.quantize_) {
     LOG(INFO) << "quantization is enabled";
     argument_.SetQuantEnabledOpTypes(
-        config_.GetQuantizeConfig()->GetQuantizeEnabledOpTypes());
+        config_.GetQuantizerConfig()->GetQuantizeEnabledOpTypes());
   }
 
   auto passes = config_.pass_builder()->AllPasses();

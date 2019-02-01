@@ -31,11 +31,11 @@ enum QuantizeAlgorithm {
   KL,
 };
 
-struct QuantizeConfig {
-  QuantizeConfig();
+struct QuantizerConfig {
+  QuantizerConfig();
 
-  void SetStrategy(std::string op_name, std::string var_name,
-                   QuantizeAlgorithm alg) {
+  void SetScaleAlgo(std::string op_name, std::string var_name,
+                    QuantizeAlgorithm alg) {
     rules_[op_name][var_name] = alg;
   }
 
@@ -46,12 +46,12 @@ struct QuantizeConfig {
     quantize_enabled_op_types_ = op_list;
   }
 
-  void SetQuantWarmupData(std::shared_ptr<std::vector<PaddleTensor>> data) {
-    quant_warmup_data_ = data;
+  void SetWarmupData(std::shared_ptr<std::vector<PaddleTensor>> data) {
+    warmup_data_ = data;
   }
 
-  std::shared_ptr<std::vector<PaddleTensor>> GetQuantWarmupData() {
-    return quant_warmup_data_;
+  std::shared_ptr<std::vector<PaddleTensor>> GetWarmupData() {
+    return warmup_data_;
   }
 
   int GetWarmupBatchSize() { return warmup_bs; }
@@ -59,8 +59,8 @@ struct QuantizeConfig {
     return quantize_enabled_op_types_;
   }
 
-  QuantizeAlgorithm GetRule(const std::string& op_name,
-                            const std::string& conn_name) {
+  QuantizeAlgorithm GetScaleAlgo(const std::string& op_name,
+                                 const std::string& conn_name) {
     return rules_[op_name][conn_name];
   }
 
@@ -69,7 +69,7 @@ struct QuantizeConfig {
  protected:
   std::map<std::string, std::map<std::string, QuantizeAlgorithm>> rules_;
   std::unordered_set<std::string> quantize_enabled_op_types_;
-  std::shared_ptr<std::vector<PaddleTensor>> quant_warmup_data_;
+  std::shared_ptr<std::vector<PaddleTensor>> warmup_data_;
   int warmup_bs{0};
 };
 

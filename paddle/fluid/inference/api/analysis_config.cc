@@ -17,7 +17,7 @@
 #include "paddle/fluid/inference/api/paddle_analysis_config.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_pass_builder.h"
-#include "paddle/fluid/inference/api/paddle_quantize_config.h"
+#include "paddle/fluid/inference/api/paddle_quantizer_config.h"
 #include "paddle/fluid/platform/enforce.h"
 #include "paddle/fluid/platform/gpu_info.h"
 
@@ -107,7 +107,7 @@ contrib::AnalysisConfig::AnalysisConfig(const contrib::AnalysisConfig &other) {
   CP_MEMBER(mkldnn_enabled_op_types_);
   // Quantization related.
   CP_MEMBER(quantize_);
-  CP_MEMBER(quantize_config_);
+  CP_MEMBER(quantizer_config_);
 
   // Ir related.
   CP_MEMBER(enable_ir_optim_);
@@ -144,17 +144,18 @@ void contrib::AnalysisConfig::EnableMKLDNN() {
   Update();
 }
 
-void contrib::AnalysisConfig::EnableQuantize() {
+void contrib::AnalysisConfig::EnableQuantizer() {
   quantize_ = true;
-  if (!quantize_config_) quantize_config_.reset(new contrib::QuantizeConfig());
+  if (!quantizer_config_)
+    quantizer_config_.reset(new contrib::QuantizerConfig());
 
   Update();
 }
 
-std::shared_ptr<contrib::QuantizeConfig>
-contrib::AnalysisConfig::GetQuantizeConfig() {
-  if (!quantize_config_) EnableQuantize();
-  return quantize_config_;
+std::shared_ptr<contrib::QuantizerConfig>
+contrib::AnalysisConfig::GetQuantizerConfig() {
+  if (!quantizer_config_) EnableQuantizer();
+  return quantizer_config_;
 }
 
 void contrib::AnalysisConfig::EnableTensorRtEngine(int workspace_size,
@@ -234,9 +235,9 @@ void contrib::AnalysisConfig::Update() {
   if (quantize_) {
     if (!enable_ir_optim_) {
       LOG(ERROR)
-          << "EnableQuantize() only works when IR optimization is enabled.";
+          << "EnableQuantizer() only works when IR optimization is enabled.";
     }
-    pass_builder_->EnableQuantize();
+    pass_builder_->EnableQuantizer();
     quantize_ = true;
   }
 
@@ -272,7 +273,7 @@ std::string contrib::AnalysisConfig::SerializeInfoCache() {
   ss << ";";
 
   ss << quantize_;
-  // TODO(wojtuss): handle QuantizeConfig
+  // TODO(wojtuss): handle QuantizerConfig
 
   ss << model_from_memory_;
 

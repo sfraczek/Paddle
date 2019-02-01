@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/fluid/inference/api/paddle_quantize_config.h"
+#include "paddle/fluid/inference/api/paddle_quantizer_config.h"
 
 namespace paddle {
 
-contrib::QuantizeConfig::QuantizeConfig() {
+contrib::QuantizerConfig::QuantizerConfig() {
   rules_["conv2d"]["Input"] = minmax;
   rules_["conv2d"]["Filters"] = KL;
   rules_["conv2d"]["Bias"] = none;  // do not calculate scale for biases
