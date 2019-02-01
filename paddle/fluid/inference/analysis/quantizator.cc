@@ -118,8 +118,8 @@ void Quantizator::CalculateScales(const std::string& op_name,
 }
 
 // Using the KL-divergence method get the most precise scaling factor.
-void Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
-                                          int num_quantized_bins) {
+float Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
+                                           int num_quantized_bins) {
   float max_val = activation_blob.maxCoeff();
   float min_val = activation_blob.minCoeff();
   std::vector<int> hist;
@@ -158,10 +158,10 @@ void Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
       starting_iter = static_cast<int>(0.6 * ending_iter);
     }
   }
-  // auto P_sum = activation_blob.size();
-  // int min_kl_divergence = 0;
-  // int min_kl_index = 0;
-  // bool kl_inited = false;
+  auto P_sum = activation_blob.size();
+  int min_kl_divergence = 0;
+  int min_kl_index = 0;
+  bool kl_inited = false;
   for (int i = starting_iter; i <= ending_iter; i++) {
     std::vector<int> reference_distr_P(&hist[0], &hist[i]);
     auto outliers_count = std::accumulate(&hist[i], &hist[2048], 0);
@@ -186,8 +186,57 @@ void Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
     }
     candidate_distr_Q =
         ExpandQuantizedBins(candidate_distr_Q_quantized, reference_distr_bins);
-    // TODO(sfraczek): continue rewriting from
+    int Q_sum =
+        std::accumulate(candidate_distr_Q.begin(), candidate_distr_Q.end(), 0);
+    auto kl_divergence =
+        safe_entropy(reference_distr_P, P_sum, candidate_distr_Q, Q_sum);
+    if (!kl_inited) {
+      min_kl_divergence = kl_divergence;
+      min_kl_index = i;
+      kl_inited = true;
+    } else if (kl_divergence < min_kl_divergence) {
+      min_kl_divergence = kl_divergence;
+      min_kl_index = i;
+    } else {
+    }
   }
+  if (min_kl_index == 0) {
+    while (starting_iter > 0) {
+      if (hist[starting_iter] == 0) {
+        starting_iter -= 1;
+        continue;
+      } else {
+        break;
+      }
+      min_kl_index = starting_iter;
+    }
+  }
+  return (min_kl_index + 0.5) * bin_width;
+}
+
+// Calculate the entropy.
+float Quantizator::safe_entropy(std::vector<int> reference_distr_P, int P_sum,
+                                std::vector<int> candidate_distr_Q, int Q_sum) {
+  PADDLE_ENFORCE_EQ(reference_distr_P.size(), candidate_distr_Q.size());
+  float tmp_sum1 = 0;
+  float tmp_sum2 = 0;
+  for (size_t idx = 0; idx < reference_distr_P.size(); idx++) {
+    int p_idx = reference_distr_P[idx];
+    int q_idx = candidate_distr_Q[idx];
+    if (p_idx == 0) {
+      tmp_sum1 += 0;
+      tmp_sum2 += 0;
+    } else {
+      if (q_idx == 0) {
+        throw std::runtime_error("Fatal error!, idx = " + std::to_string(idx) +
+                                 " qindex = 0! p_idx = " +
+                                 std::to_string(p_idx));
+      }
+      tmp_sum1 += p_idx * (log(Q_sum * p_idx));
+      tmp_sum2 += p_idx * (log(P_sum * q_idx));
+    }
+  }
+  return (tmp_sum1 - tmp_sum2) / P_sum;
 }
 
 std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
@@ -288,7 +337,8 @@ bool Quantizator::Quantize() {
         "quant_gather_var_names_pass");
     const auto &qvars_names =
         gather_pass->Get<std::unordered_set<std::string>>("quant_var_names");
-    std::cout << "Length of the names set: " << qvars_names.size() << std::endl;
+    std::cout << "Length of the names set: " << qvars_names.size() <<
+   std::endl;
     // a vector for variables to be quantized
     // std::unique_ptr<std::map<std::string, PaddleTensor>> q_vars(
     // new std::vector<PaddleTensor>());

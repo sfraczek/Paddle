@@ -74,13 +74,15 @@ class Quantizator final {
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
-  void GetOptimalScalingFactor(EigenVectorArrayMap eigen_data_vector,
-                               int num_quantized_bins = 255);
+  float GetOptimalScalingFactor(EigenVectorArrayMap eigen_data_vector,
+                                int num_quantized_bins = 255);
   std::tuple<std::vector<int>, float> Histogram(
       EigenVectorArrayMap activation_blob, float min_val, float max_val,
       int num_bins = 2048);
   std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
                                        std::vector<int> reference_bins);
+  float safe_entropy(std::vector<int> reference_distr_P, int P_sum,
+                     std::vector<int> candidate_distr_Q, int Q_sum);
 
  private:
   Scope* scope_;
