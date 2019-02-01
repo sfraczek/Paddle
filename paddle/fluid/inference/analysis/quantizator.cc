@@ -75,50 +75,46 @@ void Quantizator::CalculateScales(const std::string& op_name,
                                   const std::string& conn_name,
                                   const std::string& var_name,
                                   const LoDTensor& lod_tensor,
-                                  float int_max_value) {
+                                  float var_max_range) {
   // adds pairs variable name -> LoDTensor with scale to the scales map
 
   using contrib::QuantizeAlgorithm;
   using platform::CPUPlace;
   using framework::EigenVector;
 
-  PADDLE_ENFORCE(
-      int_max_value, 255,
-      "Quantizator: Only uint8 quantization supported at the moment.");
-
   LoDTensor scale_tensor;
   scale_tensor.Resize({1});
+  auto* scale_ptr = scale_tensor.mutable_data<float>(CPUPlace());
 
   if (lod_tensor.numel() == 0)
     throw std::runtime_error(
         "Quantizator: LoDTensor of variable for quantization should not be "
         "empty.");
-  const float* lod_tensor_ptr = lod_tensor.data<float>();
 
   auto rule = config_->GetRule(op_name, conn_name);
   switch (rule) {
     case QuantizeAlgorithm::none:
       return;
     case QuantizeAlgorithm::minmax: {
-      float max_abs = abs(lod_tensor_ptr[0]);
-      for (int i = 1; i < lod_tensor.numel(); i++) {
-        max_abs = std::max(max_abs, std::abs(lod_tensor_ptr[i]));
-      }
-      float quantization_factor = static_cast<float>(int_max_value / max_abs);
-      auto* scale_ptr = scale_tensor.mutable_data<float>(CPUPlace());
-      scale_ptr[0] = quantization_factor;
+      scale_ptr[0] = GetMaxScalingFactor(
+          {lod_tensor.data<float>(), lod_tensor.numel(), 1}, var_max_range);
       break;
     }
     case QuantizeAlgorithm::KL:
-      GetOptimalScalingFactor({lod_tensor_ptr, lod_tensor.numel(), 1});
-      throw std::runtime_error(
-          "Quantizator: QuantizeAlgorithm KL is not yet implemented.");
+      scale_ptr[0] = GetOptimalScalingFactor(
+          {lod_tensor.data<float>(), lod_tensor.numel(), 1}, var_max_range);
       break;
     default:
       throw std::runtime_error(
           "Quantizator: Unexpected QuantizeAlgorithm specified.");
   }
   scales_[var_name] = std::move(scale_tensor);
+}
+
+float Quantizator::GetMaxScalingFactor(ConstEigenVectorArrayMap activation_blob,
+                                       float var_max_range) {
+  float max_abs = activation_blob.abs().maxCoeff();
+  return static_cast<float>(var_max_range / max_abs);
 }
 
 // Using the KL-divergence method get the most precise scaling factor.

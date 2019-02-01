@@ -73,12 +73,14 @@ class Quantizator final {
   bool GatherData();
   void CalculateScales(const std::string& op_name, const std::string& conn_name,
                        const std::string& var_name, const LoDTensor& var_tensor,
-                       float int_max_value);
+                       float var_max_range);
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
   float GetOptimalScalingFactor(ConstEigenVectorArrayMap eigen_data_vector,
                                 int num_quantized_bins = 255);
+  float GetMaxScalingFactor(ConstEigenVectorArrayMap activation_blob,
+                            float var_max_range);
   std::pair<std::vector<int>, float> Histogram(
       ConstEigenVectorArrayMap activation_blob, float min_val, float max_val,
       int num_bins = 2048);
