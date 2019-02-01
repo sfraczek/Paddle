@@ -26,7 +26,7 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <tuple>
+#include <utility>
 #include <vector>
 #include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/lod_tensor.h"
@@ -41,7 +41,10 @@ namespace inference {
 namespace analysis {
 
 using framework::NaiveExecutor;
-using EigenVectorArrayMap = Eigen::Map<Eigen::Array<float, Eigen::Dynamic, 1>>;
+// using EigenVectorArrayMap = Eigen::Map<Eigen::Array<float, Eigen::Dynamic,
+// 1>>;
+using ConstEigenVectorArrayMap =
+    Eigen::Map<const Eigen::Array<float, Eigen::Dynamic, 1>>;
 using framework::Scope;
 using framework::ProgramDesc;
 using framework::LoDTensor;
@@ -74,10 +77,10 @@ class Quantizator final {
   bool RunQuantizePass();
   bool RunOptimizePass();
   bool SaveModel();
-  float GetOptimalScalingFactor(EigenVectorArrayMap eigen_data_vector,
+  float GetOptimalScalingFactor(ConstEigenVectorArrayMap eigen_data_vector,
                                 int num_quantized_bins = 255);
-  std::tuple<std::vector<int>, float> Histogram(
-      EigenVectorArrayMap activation_blob, float min_val, float max_val,
+  std::pair<std::vector<int>, float> Histogram(
+      ConstEigenVectorArrayMap activation_blob, float min_val, float max_val,
       int num_bins = 2048);
   std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
                                        std::vector<int> reference_bins);

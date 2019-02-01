@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <map>
 #include <numeric>
-#include <tuple>
+#include <utility>
 #include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/ir/pass.h"
 #include "paddle/fluid/framework/operator.h"
@@ -82,6 +82,10 @@ void Quantizator::CalculateScales(const std::string& op_name,
   using platform::CPUPlace;
   using framework::EigenVector;
 
+  PADDLE_ENFORCE(
+      int_max_value, 255,
+      "Quantizator: Only uint8 quantization supported at the moment.");
+
   LoDTensor scale_tensor;
   scale_tensor.Resize({1});
 
@@ -106,7 +110,7 @@ void Quantizator::CalculateScales(const std::string& op_name,
       break;
     }
     case QuantizeAlgorithm::KL:
-      // GetOptimalScalingFactor(eigen_data_vector);
+      GetOptimalScalingFactor({lod_tensor_ptr, lod_tensor.numel(), 1});
       throw std::runtime_error(
           "Quantizator: QuantizeAlgorithm KL is not yet implemented.");
       break;
@@ -118,8 +122,8 @@ void Quantizator::CalculateScales(const std::string& op_name,
 }
 
 // Using the KL-divergence method get the most precise scaling factor.
-float Quantizator::GetOptimalScalingFactor(EigenVectorArrayMap activation_blob,
-                                           int num_quantized_bins) {
+float Quantizator::GetOptimalScalingFactor(
+    ConstEigenVectorArrayMap activation_blob, int num_quantized_bins) {
   float max_val = activation_blob.maxCoeff();
   float min_val = activation_blob.minCoeff();
   std::vector<int> hist;
@@ -228,8 +232,8 @@ float Quantizator::safe_entropy(std::vector<int> reference_distr_P, int P_sum,
       tmp_sum2 += 0;
     } else {
       if (q_idx == 0) {
-        throw std::runtime_error("Fatal error!, idx = " + std::to_string(idx) +
-                                 " qindex = 0! p_idx = " +
+        throw std::runtime_error("Quantizator: Fatal error!, idx = " +
+                                 std::to_string(idx) + " qindex = 0! p_idx = " +
                                  std::to_string(p_idx));
       }
       tmp_sum1 += p_idx * (log(Q_sum * p_idx));
@@ -270,8 +274,8 @@ std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
 }
 
 // Returns histogram and bin width
-std::tuple<std::vector<int>, float> Quantizator::Histogram(
-    EigenVectorArrayMap activation_blob, float min_val, float max_val,
+std::pair<std::vector<int>, float> Quantizator::Histogram(
+    ConstEigenVectorArrayMap activation_blob, float min_val, float max_val,
     int num_bins) {
   auto bin_width = (max_val - min_val) / num_bins;
   std::vector<int> hist(num_bins);
@@ -285,7 +289,7 @@ std::tuple<std::vector<int>, float> Quantizator::Histogram(
   // auto bin_blob = (activation_blob - min_val) / bin_width
   // for int (i = 0; i < bin_blob.size(); i++)
   //   hist[bin_blob[i]]=activation_blob[i];
-  return std::make_tuple(std::move(hist), std::move(bin_width));
+  return std::make_pair(std::move(hist), std::move(bin_width));
 }
 
 // void Quantizator::KLDivergence(refDistP, candidDistQ) {
