@@ -301,7 +301,7 @@ bool Quantizator::RunQuantizePass() {
   // push the scales to the quantize pass
   auto cpu_quantize_pass =
       framework::ir::PassRegistry::Instance().Get("cpu_quantize_pass");
-  cpu_quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_names",
+  cpu_quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_scales",
                                                            &scales_);
   //
   return true;
