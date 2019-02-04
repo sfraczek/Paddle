@@ -1,4 +1,4 @@
-// Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserved.
+// Copyright (c) 2018 PaddlePaddle Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <string>
-#include "paddle/fluid/framework/ir/fuse_pass_base.h"
-#include "paddle/fluid/framework/ir/graph.h"
-#include "paddle/fluid/framework/ir/graph_pattern_detector.h"
+#include "paddle/fluid/framework/ir/cpu_quantize_pass.h"
 
 namespace paddle {
 namespace framework {
 namespace ir {
 
-/*
- * Quantize pass for INT8 quantization
- */
-class QuantizePass : public FusePassBase {
- public:
-  virtual ~QuantizePass() {}
+std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
+    std::unique_ptr<ir::Graph> graph) const {
+  PADDLE_ENFORCE(graph.get());
 
- protected:
-  std::unique_ptr<ir::Graph> ApplyImpl(std::unique_ptr<ir::Graph> graph) const;
-  const std::string name_scope_{"quantize_fuse"};
-};
+  // insert quantize/dequantize
+  // quantize weights and biases
+
+  return graph;
+}
 
 }  // namespace ir
 }  // namespace framework
 }  // namespace paddle
+
+REGISTER_PASS(cpu_quantize_pass, paddle::framework::ir::CPUQuantizePass);

@@ -299,10 +299,10 @@ std::pair<std::vector<int>, float> Quantizator::Histogram(
 
 bool Quantizator::RunQuantizePass() {
   // push the scales to the quantize pass
-  auto quantize_pass =
-      framework::ir::PassRegistry::Instance().Get("quantize_pass");
-  quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_names",
-                                                       &scales_);
+  auto cpu_quantize_pass =
+      framework::ir::PassRegistry::Instance().Get("cpu_quantize_pass");
+  cpu_quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_names",
+                                                           &scales_);
   //
   return true;
 }
