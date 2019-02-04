@@ -154,7 +154,8 @@ void contrib::AnalysisConfig::EnableQuantizer() {
 
 std::shared_ptr<contrib::QuantizerConfig>
 contrib::AnalysisConfig::GetQuantizerConfig() {
-  if (!quantizer_config_) EnableQuantizer();
+  if (!quantizer_config_)
+    quantizer_config_.reset(new contrib::QuantizerConfig());
   return quantizer_config_;
 }
 
@@ -238,7 +239,6 @@ void contrib::AnalysisConfig::Update() {
           << "EnableQuantizer() only works when IR optimization is enabled.";
     }
     pass_builder_->EnableQuantizer();
-    quantize_ = true;
   }
 
   if (enable_memory_optim_) {
