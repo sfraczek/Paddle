@@ -303,12 +303,18 @@ bool Quantizator::RunQuantizePass() {
       framework::ir::PassRegistry::Instance().Get("cpu_quantize_pass");
   cpu_quantize_pass->Set<std::map<std::string, LoDTensor>>("quant_var_scales",
                                                            &scales_);
-  //
+  // TODO(sfraczek): How to run it?
   return true;
 }
 
 bool Quantizator::RunOptimizePass() {
-  //
+  auto cpu_quantize_squash_pass =
+      framework::ir::PassRegistry::Instance().Get("cpu_quantize_squash_pass");
+  auto cpu_quantize_scale_out_pass =
+      framework::ir::PassRegistry::Instance().Get(
+          "cpu_quantize_scale_out_pass");
+
+  // TODO(sfraczek): How to run it?
   return true;
 }
 

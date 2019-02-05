@@ -19,7 +19,9 @@ limitations under the License. */
 namespace paddle {
 namespace framework {
 namespace ir {
-
+/*
+ * Specifies which operators should be quantized.
+ */
 class CPUQuantizePlacementPass : public Pass {
  protected:
   std::unique_ptr<ir::Graph> ApplyImpl(
