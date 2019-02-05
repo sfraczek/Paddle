@@ -55,12 +55,12 @@ typedef std::function<bool(const std::vector<PaddleTensor>& inputs,
                            int batch_size)>
     PredictorRun;
 
-class Quantizator final {
+class Quantizer final {
  public:
-  explicit Quantizator(Scope* scope,
-                       const std::shared_ptr<ProgramDesc>& infer_program,
-                       const std::shared_ptr<QuantizerConfig>& config,
-                       PredictorRun predictor_run)
+  explicit Quantizer(Scope* scope,
+                     const std::shared_ptr<ProgramDesc>& infer_program,
+                     const std::shared_ptr<QuantizerConfig>& config,
+                     PredictorRun predictor_run)
       : scope_(scope),
         infer_program_(infer_program),
         config_(config),

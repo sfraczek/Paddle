@@ -28,7 +28,7 @@
 #include "paddle/fluid/framework/scope.h"
 #include "paddle/fluid/framework/var_type_traits.h"
 #include "paddle/fluid/inference/analysis/passes/memory_optimize_pass.h"
-#include "paddle/fluid/inference/analysis/quantizator.h"
+#include "paddle/fluid/inference/analysis/quantizer.h"
 #include "paddle/fluid/inference/api/helper.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_inference_pass.h"
@@ -47,7 +47,7 @@ DECLARE_bool(profile);
 namespace paddle {
 
 using contrib::AnalysisConfig;
-using inference::analysis::Quantizator;
+using inference::analysis::Quantizer;
 
 namespace {
 bool IsPersistable(const framework::VarDesc *var) {
@@ -107,11 +107,11 @@ bool AnalysisPredictor::PrepareQuantize() {
         std::bind(&AnalysisPredictor::Run, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
     framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
-    // initialize quantizator
-    quantizator_.reset(new Quantizator(
-        scope, inference_program_, config_.quantizer_config_, predictor_run));
+    // initialize quantizer
+    quantizer_.reset(new Quantizer(scope, inference_program_,
+                                   config_.quantizer_config_, predictor_run));
     // do the quantization
-    if (!quantizator_->Quantize()) return false;
+    if (!quantizer_->Quantize()) return false;
   }
 
   return true;
@@ -351,7 +351,7 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
 }
 
 bool AnalysisPredictor::GetQuantVars(
-    std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
+    const std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars) {
   framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
   // go through all the quantized operators and gather all the inputs,
   // outputs,

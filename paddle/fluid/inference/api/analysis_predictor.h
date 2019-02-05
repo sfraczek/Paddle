@@ -19,7 +19,7 @@
 #include <vector>
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/inference/analysis/analyzer.h"
-#include "paddle/fluid/inference/analysis/quantizator.h"
+#include "paddle/fluid/inference/analysis/quantizer.h"
 #include "paddle/fluid/inference/api/api_impl.h"
 #include "paddle/fluid/inference/api/details/reset_tensor_array.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
@@ -99,7 +99,7 @@ class AnalysisPredictor : public PaddlePredictor {
   void GetFetchOne(const framework::LoDTensor &fetchs,
                    PaddleTensor *output_data);
   bool GetQuantVars(
-      std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars);
+      const std::unique_ptr<std::map<std::string, PaddleTensor>> &quant_vars);
 
 // Some more detailed tests, they are made the friends of the predictor, so that
 // the all the details can be tested.
@@ -126,7 +126,7 @@ class AnalysisPredictor : public PaddlePredictor {
   details::TensorArrayBatchCleaner tensor_array_batch_cleaner_;
   // A mutex help to make Clone thread safe.
   std::mutex clone_mutex_;
-  std::shared_ptr<inference::analysis::Quantizator> quantizator_;
+  std::shared_ptr<inference::analysis::Quantizer> quantizer_;
 
   // For memory optimization.
   const size_t max_shape_collect_count_{1000};

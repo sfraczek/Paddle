@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/fluid/inference/analysis/quantizator.h"
+#include "paddle/fluid/inference/analysis/quantizer.h"
 #include <algorithm>
 #include <map>
 #include <numeric>
@@ -27,7 +27,7 @@ namespace paddle {
 namespace inference {
 namespace analysis {
 
-bool Quantizator::RunWarmup() {
+bool Quantizer::RunWarmup() {
   // std::unique_ptr<std::map<std::string, PaddleTensor>> & quant_vars) {
   VLOG(3) << "Predictor: run a quantization warmup iteration";
   auto warmup_data = config_->GetWarmupData();
@@ -44,7 +44,7 @@ bool Quantizator::RunWarmup() {
   return true;
 }
 
-bool Quantizator::GatherData() {
+bool Quantizer::GatherData() {
   /*
    *   std::map<std::string, std::map<std::string, LoDTensor>> gathered_data;
    *   for (auto *op : infer_program_->Block(0).AllOps()) {
@@ -71,11 +71,11 @@ bool Quantizator::GatherData() {
   return true;
 }
 
-void Quantizator::CalculateScales(const std::string& op_name,
-                                  const std::string& conn_name,
-                                  const std::string& var_name,
-                                  const LoDTensor& lod_tensor,
-                                  float var_max_range) {
+void Quantizer::CalculateScales(const std::string& op_name,
+                                const std::string& conn_name,
+                                const std::string& var_name,
+                                const LoDTensor& lod_tensor,
+                                float var_max_range) {
   // adds pairs variable name -> LoDTensor with scale to the scales map
 
   using contrib::QuantizeAlgorithm;
@@ -88,7 +88,7 @@ void Quantizator::CalculateScales(const std::string& op_name,
 
   if (lod_tensor.numel() == 0)
     throw std::runtime_error(
-        "Quantizator: LoDTensor of variable for quantization should not be "
+        "Quantizer: LoDTensor of variable for quantization should not be "
         "empty.");
 
   auto rule = config_->GetScaleAlgo(op_name, conn_name);
@@ -106,19 +106,19 @@ void Quantizator::CalculateScales(const std::string& op_name,
       break;
     default:
       throw std::runtime_error(
-          "Quantizator: Unexpected QuantizeAlgorithm specified.");
+          "Quantizer: Unexpected QuantizeAlgorithm specified.");
   }
   scales_[var_name] = std::move(scale_tensor);
 }
 
-float Quantizator::GetMaxScalingFactor(ConstEigenVectorArrayMap activation_blob,
-                                       float var_max_range) {
+float Quantizer::GetMaxScalingFactor(ConstEigenVectorArrayMap activation_blob,
+                                     float var_max_range) {
   float max_abs = activation_blob.abs().maxCoeff();
   return static_cast<float>(var_max_range / max_abs);
 }
 
 // Using the KL-divergence method get the most precise scaling factor.
-float Quantizator::GetOptimalScalingFactor(
+float Quantizer::GetOptimalScalingFactor(
     ConstEigenVectorArrayMap activation_blob, int num_quantized_bins) {
   float max_val = activation_blob.maxCoeff();
   float min_val = activation_blob.minCoeff();
@@ -215,8 +215,8 @@ float Quantizator::GetOptimalScalingFactor(
 }
 
 // Calculate the entropy.
-float Quantizator::safe_entropy(std::vector<int> reference_distr_P, int P_sum,
-                                std::vector<int> candidate_distr_Q, int Q_sum) {
+float Quantizer::safe_entropy(std::vector<int> reference_distr_P, int P_sum,
+                              std::vector<int> candidate_distr_Q, int Q_sum) {
   PADDLE_ENFORCE_EQ(reference_distr_P.size(), candidate_distr_Q.size());
   float tmp_sum1 = 0;
   float tmp_sum2 = 0;
@@ -228,7 +228,7 @@ float Quantizator::safe_entropy(std::vector<int> reference_distr_P, int P_sum,
       tmp_sum2 += 0;
     } else {
       if (q_idx == 0) {
-        throw std::runtime_error("Quantizator: Fatal error!, idx = " +
+        throw std::runtime_error("Quantizer: Fatal error!, idx = " +
                                  std::to_string(idx) + " qindex = 0! p_idx = " +
                                  std::to_string(p_idx));
       }
@@ -270,7 +270,7 @@ std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
 }
 
 // Returns histogram and bin width
-std::pair<std::vector<int>, float> Quantizator::Histogram(
+std::pair<std::vector<int>, float> Quantizer::Histogram(
     ConstEigenVectorArrayMap activation_blob, float min_val, float max_val,
     int num_bins) {
   auto bin_width = (max_val - min_val) / num_bins;
@@ -288,7 +288,7 @@ std::pair<std::vector<int>, float> Quantizator::Histogram(
   return std::make_pair(std::move(hist), std::move(bin_width));
 }
 
-// void Quantizator::KLDivergence(refDistP, candidDistQ) {
+// void Quantizer::KLDivergence(refDistP, candidDistQ) {
 // naive implementation for 8 bits
 // collect historgram of activations
 // generate many quantized distributions with different saturation thresholds
@@ -297,7 +297,7 @@ std::pair<std::vector<int>, float> Quantizator::Histogram(
 //     outliersCount = sum(
 // }
 
-bool Quantizator::RunQuantizePass() {
+bool Quantizer::RunQuantizePass() {
   // push the scales to the quantize pass
   auto cpu_quantize_pass =
       framework::ir::PassRegistry::Instance().Get("cpu_quantize_pass");
@@ -307,7 +307,7 @@ bool Quantizator::RunQuantizePass() {
   return true;
 }
 
-bool Quantizator::RunOptimizePass() {
+bool Quantizer::RunOptimizePass() {
   auto cpu_quantize_squash_pass =
       framework::ir::PassRegistry::Instance().Get("cpu_quantize_squash_pass");
   auto cpu_quantize_scale_out_pass =
@@ -318,12 +318,12 @@ bool Quantizator::RunOptimizePass() {
   return true;
 }
 
-bool Quantizator::SaveModel() {
+bool Quantizer::SaveModel() {
   //
   return true;
 }
 
-bool Quantizator::Quantize() {
+bool Quantizer::Quantize() {
   // warmup iteration
   if (!RunWarmup()) return false;
   // gather data from variables and calculate scales for them
