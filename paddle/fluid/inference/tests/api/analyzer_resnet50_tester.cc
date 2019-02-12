@@ -103,6 +103,7 @@ TEST(Analyzer_resnet50, quantization) {
 
   AnalysisConfig cfg;
   SetConfig(&cfg);
+  cfg.EnableMKLDNN();
   cfg.EnableQuantizer();
   cfg.quantizer_config()->SetWarmupData(warmup_data);
   cfg.quantizer_config()->SetWarmupBatchSize(100);
