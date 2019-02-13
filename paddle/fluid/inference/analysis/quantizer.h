@@ -1,4 +1,4 @@
-// Copyright (c) 2018 PaddlePaddle Authors. All Rights Reserved.
+// Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -11,14 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
-/*
- * This file defines IRPassManager, it helps control the passes in IR. Inference
- * phrase will load the model program and parameters from disk, that is quite
- * different from the training phase.
- * This manager will control the Passes and make the passes in IR work smoothly
- * for inference.
- */
 
 #pragma once
 
