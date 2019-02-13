@@ -106,11 +106,12 @@ TEST(Analyzer_resnet50, quantization) {
   cfg.EnableMKLDNN();
   cfg.EnableQuantizer();
   cfg.quantizer_config()->SetWarmupData(warmup_data);
-  cfg.quantizer_config()->SetWarmupBatchSize(100);
+  cfg.quantizer_config()->SetWarmupBatchSize(
+      warmup_data->front().shape.front());
   cfg.quantizer_config()->SetEnabledOpTypes({"conv2d", "pool2d"});
 
-  CompareDeterministic(reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
-                       input_slots_all);
+  CompareNativeAndAnalysis(
+      reinterpret_cast<const PaddlePredictor::Config *>(&cfg), input_slots_all);
 }
 
 }  // namespace analysis
