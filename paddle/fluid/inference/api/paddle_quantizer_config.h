@@ -20,6 +20,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "paddle_analysis_config.h"
 #include "paddle_api.h"  // NOLINT
 
 namespace paddle {
@@ -37,8 +38,21 @@ enum class QuantMax : unsigned int {
   S8_MAX = 127,
 };
 
-struct QuantizerConfig {
+struct QuantizerConfig : public AnalysisConfig {
   QuantizerConfig();
+  ~QuantizerConfig() = default;
+  explicit QuantizerConfig(const QuantizerConfig& other);
+  explicit QuantizerConfig(const std::string& model_dir);
+  explicit QuantizerConfig(const std::string& prog_file,
+                           const std::string& params_file);
+
+  /** Turn on quantization.
+   */
+  void EnableQuantizer();
+
+  /** A boolean state telling whether the quantization is enabled.
+   */
+  bool quantizer_enabled() const { return use_quantizer_; }
 
   /** Specify a quantization algorithm for a connection (input/output) of the
    * operator type.
@@ -87,6 +101,13 @@ struct QuantizerConfig {
   }
 
  protected:
+  // Update the config.
+  void Update() override;
+
+  std::string SerializeInfoCache() override;
+
+ protected:
+  bool use_quantizer_{false};
   std::map<std::string, std::map<std::string, ScaleAlgo>> rules_;
   std::unordered_set<std::string> enabled_op_types_;
   std::shared_ptr<std::vector<PaddleTensor>> warmup_data_;

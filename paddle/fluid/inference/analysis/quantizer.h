@@ -25,7 +25,6 @@
 #include "paddle/fluid/framework/program_desc.h"
 #include "paddle/fluid/framework/scope.h"
 #include "paddle/fluid/inference/analysis/argument.h"
-#include "paddle/fluid/inference/api/paddle_analysis_config.h"
 #include "paddle/fluid/inference/api/paddle_api.h"
 #include "paddle/fluid/inference/api/paddle_quantizer_config.h"
 
@@ -52,12 +51,10 @@ class Quantizer final {
  public:
   explicit Quantizer(Scope* scope, std::shared_ptr<ProgramDesc> infer_program,
                      const std::shared_ptr<QuantizerConfig>& config,
-                     const AnalysisConfig& aconfig, const Argument& aargument,
-                     PredictorRun predictor_run)
+                     const Argument& aargument, PredictorRun predictor_run)
       : scope_(scope),
         infer_program_(infer_program),
         config_(config),
-        aconfig_(aconfig),
         aargument_(aargument),
         predictor_run_(predictor_run) {}
 
@@ -82,7 +79,6 @@ class Quantizer final {
   Scope* scope_;
   std::shared_ptr<ProgramDesc> infer_program_;
   const std::shared_ptr<QuantizerConfig>& config_;
-  const AnalysisConfig& aconfig_;
   const Argument& aargument_;
   PredictorRun predictor_run_;
 
