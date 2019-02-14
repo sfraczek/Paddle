@@ -30,7 +30,6 @@
 #include "paddle/fluid/framework/var_type_traits.h"
 #include "paddle/fluid/inference/analysis/helper.h"
 #include "paddle/fluid/inference/analysis/passes/memory_optimize_pass.h"
-#include "paddle/fluid/inference/analysis/quantizer.h"
 #include "paddle/fluid/inference/api/helper.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_inference_pass.h"
@@ -56,7 +55,6 @@ using inference::tensorrt::TRTInt8Calibrator;
 using inference::tensorrt::TRTCalibratorEngine;
 using inference::tensorrt::TRTCalibratorEngineManager;
 #endif
-using inference::analysis::Quantizer;
 
 namespace {
 bool IsPersistable(const framework::VarDesc *var) {
@@ -102,23 +100,6 @@ bool AnalysisPredictor::Init(
 
   // Get the feed_target_names and fetch_target_names
   PrepareFeedFetch();
-
-  return true;
-}
-
-bool AnalysisPredictor::Quantize() {
-  if (config_.quantizer_enabled()) {
-    auto predictor_run =
-        std::bind(&AnalysisPredictor::Run, this, std::placeholders::_1,
-                  std::placeholders::_2, std::placeholders::_3);
-    framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
-    // initialize quantizer
-    quantizer_.reset(new Quantizer(scope, inference_program_,
-                                   config_.quantizer_config_, config_,
-                                   argument_, predictor_run));
-    // do the quantization
-    if (!quantizer_->Quantize()) return false;
-  }
 
   return true;
 }
@@ -390,12 +371,6 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
     argument_.SetMKLDNNEnabledOpTypes(config_.mkldnn_enabled_op_types_);
   }
 
-  if (config_.use_quantizer_) {
-    LOG(INFO) << "quantization is enabled";
-    argument_.SetQuantizeEnabledOpTypes(
-        config_.quantizer_config()->enabled_op_types());
-  }
-
   auto passes = config_.pass_builder()->AllPasses();
   if (!config_.ir_optim()) {
     passes.clear();
@@ -449,10 +424,6 @@ std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<
 
   if (!predictor_p->Init(nullptr)) {
     return nullptr;
-  }
-
-  if (config.quantizer_enabled()) {
-    if (!predictor_p->Quantize()) return nullptr;
   }
 
   return std::move(predictor);

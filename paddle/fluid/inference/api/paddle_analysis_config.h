@@ -23,9 +23,8 @@
 
 // Here we include some header files with relative paths, for that in deploy,
 // the abstract path of this header file will be changed.
-#include "paddle_api.h"               // NOLINT
-#include "paddle_pass_builder.h"      // NOLINT
-#include "paddle_quantizer_config.h"  // NOLINT
+#include "paddle_api.h"           // NOLINT
+#include "paddle_pass_builder.h"  // NOLINT
 
 namespace paddle {
 
@@ -34,6 +33,7 @@ class AnalysisPredictor;
 // NOTE WIP, not stable yet.
 struct AnalysisConfig {
   AnalysisConfig() = default;
+  virtual ~AnalysisConfig() = default;
   explicit AnalysisConfig(const AnalysisConfig& other);
   explicit AnalysisConfig(const std::string& model_dir);
   explicit AnalysisConfig(const std::string& prog_file,
@@ -174,16 +174,6 @@ struct AnalysisConfig {
     mkldnn_enabled_op_types_ = op_list;
   }
 
-  /** Turn on quantization.
-   */
-  void EnableQuantizer();
-
-  /** A boolean state telling whether the quantization is enabled.
-   */
-  bool quantizer_enabled() const { return use_quantizer_; }
-
-  std::shared_ptr<QuantizerConfig> quantizer_config();
-
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.
    * @param prog_buffer_size the size of the data.
@@ -213,9 +203,9 @@ struct AnalysisConfig {
 
  protected:
   // Update the config.
-  void Update();
+  virtual void Update();
 
-  std::string SerializeInfoCache();
+  virtual std::string SerializeInfoCache();
 
  protected:
   // Model pathes.
@@ -252,9 +242,6 @@ struct AnalysisConfig {
 
   bool use_mkldnn_{false};
   std::unordered_set<std::string> mkldnn_enabled_op_types_;
-
-  bool use_quantizer_{false};
-  std::shared_ptr<QuantizerConfig> quantizer_config_;
 
   bool model_from_memory_{false};
 
