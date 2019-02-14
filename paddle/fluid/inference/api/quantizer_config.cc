@@ -30,7 +30,7 @@ QuantizerConfig::QuantizerConfig() {
 }
 
 QuantizerConfig::QuantizerConfig(const QuantizerConfig& other)
-    : AnalysisConfig(static_cast<AnalysisConfig>(other)) {
+    : AnalysisConfig(other) {
 #define CP_MEMBER(member__) member__ = other.member__;
   // Quantization related.
   CP_MEMBER(use_quantizer_);
