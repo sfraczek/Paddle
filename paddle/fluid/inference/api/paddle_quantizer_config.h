@@ -84,7 +84,7 @@ struct QuantizerConfig : public AnalysisConfig {
   /** Get the batch of data used for warm-up iteration.
    * @return batch of data.
    */
-  std::shared_ptr<std::vector<PaddleTensor>> warmup_data() {
+  std::shared_ptr<std::vector<PaddleTensor>> warmup_data() const {
     return warmup_data_;
   }
 

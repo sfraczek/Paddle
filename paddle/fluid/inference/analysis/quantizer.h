@@ -50,8 +50,8 @@ typedef std::function<bool(const std::vector<PaddleTensor>& inputs,
 class Quantizer final {
  public:
   explicit Quantizer(Scope* scope, std::shared_ptr<ProgramDesc> infer_program,
-                     const std::shared_ptr<QuantizerConfig>& config,
-                     const Argument& aargument, PredictorRun predictor_run)
+                     const QuantizerConfig& config, const Argument& aargument,
+                     PredictorRun predictor_run)
       : scope_(scope),
         infer_program_(infer_program),
         config_(config),
@@ -78,7 +78,7 @@ class Quantizer final {
  private:
   Scope* scope_;
   std::shared_ptr<ProgramDesc> infer_program_;
-  const std::shared_ptr<QuantizerConfig>& config_;
+  const QuantizerConfig& config_;
   const Argument& aargument_;
   PredictorRun predictor_run_;
 

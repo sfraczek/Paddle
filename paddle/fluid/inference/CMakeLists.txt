@@ -33,10 +33,11 @@ endif(WIN32)
 
 add_subdirectory(api)
 
-set(STATIC_INFERENCE_APIS paddle_fluid_api paddle_inference_api analysis_predictor)
+set(STATIC_INFERENCE_APIS paddle_fluid_api paddle_inference_api analysis_predictor quantizer_predictor)
 set(SHARED_INFERENCE_SRCS
     io.cc ${CMAKE_CURRENT_SOURCE_DIR}/api/api.cc ${CMAKE_CURRENT_SOURCE_DIR}/api/api_impl.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/api/analysis_predictor.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/api/quantizer_predictor.cc
     ${CMAKE_CURRENT_SOURCE_DIR}/api/details/zero_copy_tensor.cc)
 
 if(WIN32)
