@@ -43,6 +43,7 @@ using framework::NaiveExecutor;
  */
 class AnalysisPredictor : public PaddlePredictor {
  public:
+  explicit AnalysisPredictor() = default;
   explicit AnalysisPredictor(const AnalysisConfig &config) : config_(config) {}
   ~AnalysisPredictor();
 
@@ -63,7 +64,8 @@ class AnalysisPredictor : public PaddlePredictor {
   void CreateFeedFetchVar(framework::Scope *scope);
   void PrepareFeedFetch();
 
-  virtual void OptimizeInferenceProgram();
+  virtual void PrepareArgument();
+  void OptimizeInferenceProgram();
 
   Argument &analysis_argument() { return argument_; }
 
@@ -123,7 +125,7 @@ class AnalysisPredictor : public PaddlePredictor {
   FRIEND_TEST(AnalysisPredictor, with_gpu);
 #endif
 
- private:
+ protected:  // TODO(sfraczek): can be changed to private?
   AnalysisConfig config_;
   Argument argument_;
   std::unique_ptr<NaiveExecutor> executor_;
@@ -146,7 +148,7 @@ class AnalysisPredictor : public PaddlePredictor {
   int need_collect_var_shapes_{-1};  // -1 for default, 0 for false, 1 for true.
   std::vector<std::map<std::string, std::vector<int>>> batch_var_shapes_;
 
- private:
+ protected:
   // Some status here that help to determine the status inside the predictor.
   bool status_program_optimized_{false};
   bool status_is_cloned_{false};

@@ -332,10 +332,7 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
   return true;
 }
 
-// NOTE All the members in AnalysisConfig should be copied to Argument.
-void AnalysisPredictor::OptimizeInferenceProgram() {
-  status_program_optimized_ = true;
-
+void AnalysisPredictor::PrepareArgument() {
   argument_.SetUseGPU(config_.use_gpu());
   argument_.SetGPUDeviceId(config_.gpu_device_id());
   argument_.SetEnableMemoryOptim(config_.enable_memory_optim());
@@ -379,6 +376,13 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
   argument_.SetIrAnalysisPasses(passes);
   argument_.SetAnalysisPasses(config_.pass_builder()->AnalysisPasses());
   argument_.SetScopeNotOwned(scope_.get());
+}
+
+// NOTE All the members in AnalysisConfig should be copied to Argument.
+void AnalysisPredictor::OptimizeInferenceProgram() {
+  status_program_optimized_ = true;
+
+  PrepareArgument();
   Analyzer().Run(&argument_);
 
   PADDLE_ENFORCE(argument_.scope_valid());
