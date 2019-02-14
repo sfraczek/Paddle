@@ -85,8 +85,6 @@ class AnalysisPredictor : public PaddlePredictor {
 
   std::string GetSeriazlizedProgram() const override;
 
-  bool Quantize();
-
  protected:
   /* Class that performs quantization by running warm-up, calculating
    * scales and quantizing the graph by running quantize passes.
