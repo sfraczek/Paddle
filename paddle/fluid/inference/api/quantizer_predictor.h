@@ -44,9 +44,10 @@ using framework::NaiveExecutor;
  */
 class QuantizerPredictor : public AnalysisPredictor {
  public:
+  QuantizerPredictor() = default;
   explicit QuantizerPredictor(const QuantizerConfig &config)
       : config_(config) {}
-  ~QuantizerPredictor();
+  ~QuantizerPredictor() = default;
 
   // bool Run(const std::vector<PaddleTensor> &inputs,
   //          std::vector<PaddleTensor> *output_data,
@@ -54,16 +55,16 @@ class QuantizerPredictor : public AnalysisPredictor {
 
   void PrepareArgument() override;
 
-  std::unique_ptr<ZeroCopyTensor> GetInputTensor(
-      const std::string &name) override;
-  std::unique_ptr<ZeroCopyTensor> GetOutputTensor(
-      const std::string &name) override;
+  // std::unique_ptr<ZeroCopyTensor> GetInputTensor(
+  //     const std::string &name) override;
+  // std::unique_ptr<ZeroCopyTensor> GetOutputTensor(
+  //     const std::string &name) override;
 
-  bool ZeroCopyRun() override;
+  // bool ZeroCopyRun() override;
 
   std::unique_ptr<PaddlePredictor> Clone() override;
 
-  std::string GetSeriazlizedProgram() const override;
+  // std::string GetSeriazlizedProgram() const override;
 
   bool Quantize();
 

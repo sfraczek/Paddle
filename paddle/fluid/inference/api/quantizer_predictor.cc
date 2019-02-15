@@ -84,9 +84,16 @@ void QuantizerPredictor::PrepareArgument() {
   }
 }
 
+std::unique_ptr<PaddlePredictor> QuantizerPredictor::Clone() {
+  std::lock_guard<std::mutex> lk(clone_mutex_);
+  auto *x = new QuantizerPredictor(config_);
+  x->Init(scope_, inference_program_);
+  return std::unique_ptr<PaddlePredictor>(x);
+}
+
 template <>
 std::unique_ptr<PaddlePredictor>
-CreatePaddlePredictor<QuantizerConfig, PaddleEngineKind::kAnalysis>(
+CreatePaddlePredictor<QuantizerConfig, PaddleEngineKind::kQuantizer>(
     const QuantizerConfig &config) {
   VLOG(3) << "create QuantizerConfig";
   if (config.use_gpu()) {
@@ -132,7 +139,7 @@ CreatePaddlePredictor<QuantizerConfig, PaddleEngineKind::kAnalysis>(
 template <>
 std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<QuantizerConfig>(
     const QuantizerConfig &config) {
-  return CreatePaddlePredictor<QuantizerConfig, PaddleEngineKind::kAnalysis>(
+  return CreatePaddlePredictor<QuantizerConfig, PaddleEngineKind::kQuantizer>(
       config);
 }
 
