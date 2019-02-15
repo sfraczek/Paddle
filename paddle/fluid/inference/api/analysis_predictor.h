@@ -43,7 +43,7 @@ using framework::NaiveExecutor;
  */
 class AnalysisPredictor : public PaddlePredictor {
  public:
-  explicit AnalysisPredictor() = default;
+  AnalysisPredictor() = default;
   explicit AnalysisPredictor(const AnalysisConfig &config) : config_(config) {}
   ~AnalysisPredictor();
 

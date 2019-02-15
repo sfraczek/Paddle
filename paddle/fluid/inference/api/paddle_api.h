@@ -320,6 +320,7 @@ enum class PaddleEngineKind {
   kNative = 0,        /*!< Use the native Fluid facility. */
   kAutoMixedTensorRT, /*!< Automatically mix Fluid with TensorRT. */
   kAnalysis,          /*!< More optimization. */
+  kQuantizer,         /*!< kAnalysis + Quantization. */
   kAnakin             /*!< Use Anakin for inference, not mature yet. */
 };
 
