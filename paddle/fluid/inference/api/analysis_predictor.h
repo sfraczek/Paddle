@@ -15,8 +15,8 @@
 #pragma once
 #include <algorithm>
 #include <map>
-#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 #include "paddle/fluid/framework/naive_executor.h"
 #include "paddle/fluid/inference/analysis/analyzer.h"
@@ -35,6 +35,13 @@ using inference::analysis::Analyzer;
 using framework::proto::ProgramDesc;
 using framework::NaiveExecutor;
 
+using VarQuantMaxAndScale =
+    std::map<std::string, std::pair<QuantMax, framework::LoDTensor>>;
+typedef std::function<bool(const std::vector<PaddleTensor> &inputs,
+                           std::vector<PaddleTensor> *output_data,
+                           int batch_size)>
+    PredictorRun;
+
 /** \brief This predictor is based on the original native predictor with IR and
  * Analysis support.
  *
@@ -44,9 +51,7 @@ using framework::NaiveExecutor;
  */
 class AnalysisPredictor : public PaddlePredictor {
  public:
-  AnalysisPredictor() = default;
-  explicit AnalysisPredictor(const AnalysisConfig &config)
-      : config_(new AnalysisConfig(config)) {}
+  explicit AnalysisPredictor(const AnalysisConfig &config) : config_(config) {}
   ~AnalysisPredictor();
 
   bool Init(const std::shared_ptr<framework::Scope> &parent_scope,
@@ -66,7 +71,7 @@ class AnalysisPredictor : public PaddlePredictor {
   void CreateFeedFetchVar(framework::Scope *scope);
   void PrepareFeedFetch();
 
-  virtual void PrepareArgument();
+  void PrepareArgument();
   void OptimizeInferenceProgram();
 
   Argument &analysis_argument() { return argument_; }
@@ -83,6 +88,48 @@ class AnalysisPredictor : public PaddlePredictor {
   bool Quantize();
 
  protected:
+  /* Class that performs quantization by running warm-up, calculating
+   * scales and quantizing the graph by running quantize passes.
+   */
+  class Quantizer {
+    explicit Quantizer(framework::Scope *scope,
+                       std::shared_ptr<ProgramDesc> infer_program,
+                       const QuantizerConfig &config, const Argument &aargument,
+                       PredictorRun predictor_run)
+        : scope_(scope),
+          infer_program_(infer_program),
+          config_(config),
+          aargument_(aargument),
+          predictor_run_(predictor_run) {}
+
+    // Execute full quantization procedure.
+    bool Quantize();
+
+   private:
+    // Run single warmup iteration
+    bool RunWarmup();
+    // Gather data from variables and calculate scales for them.
+    bool CalculateScales();
+    // Calculate a scale for tensor based on ScaleAlgo rules.
+    void CalculateSingleScale(const std::string &op_name,
+                              const std::string &conn_name,
+                              const std::string &var_name,
+                              const framework::LoDTensor *var_tensor);
+    void PrepareArgument(Argument *arg);
+    bool RunQuantizePasses();
+    bool SaveModel();
+
+   private:
+    framework::Scope *scope_;
+    std::shared_ptr<ProgramDesc> infer_program_;
+    const QuantizerConfig &config_;
+    const Argument &aargument_;
+    PredictorRun predictor_run_;
+
+    // variable name -> data
+    VarQuantMaxAndScale scales_;
+  };
+
   // For memory optimization.
   bool need_collect_var_shapes_for_memory_optim();
   void CollectVarShapes();
@@ -103,8 +150,6 @@ class AnalysisPredictor : public PaddlePredictor {
   template <typename T>
   void GetFetchOne(const framework::LoDTensor &fetchs,
                    PaddleTensor *output_data);
-
-  const std::shared_ptr<AnalysisConfig> config() { return config_; }
 
 #if PADDLE_WITH_TENSORRT
   // When we use Paddle-TRT INT8 engine, we need to generate calibration table
@@ -129,8 +174,9 @@ class AnalysisPredictor : public PaddlePredictor {
   FRIEND_TEST(AnalysisPredictor, with_gpu);
 #endif
 
- protected:  // TODO(sfraczek): can be changed to private?
-  std::shared_ptr<AnalysisConfig> config_;
+ private:
+  std::shared_ptr<Quantizer> quantizer_;
+  AnalysisConfig config_;
   Argument argument_;
   std::unique_ptr<NaiveExecutor> executor_;
   platform::Place place_;
@@ -152,7 +198,7 @@ class AnalysisPredictor : public PaddlePredictor {
   int need_collect_var_shapes_{-1};  // -1 for default, 0 for false, 1 for true.
   std::vector<std::map<std::string, std::vector<int>>> batch_var_shapes_;
 
- protected:
+ private:
   // Some status here that help to determine the status inside the predictor.
   bool status_program_optimized_{false};
   bool status_is_cloned_{false};

@@ -21,6 +21,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/feed_fetch_method.h"
 #include "paddle/fluid/framework/feed_fetch_type.h"
 #include "paddle/fluid/framework/ir/fuse_pass_base.h"
@@ -33,10 +34,12 @@
 #include "paddle/fluid/inference/api/helper.h"
 #include "paddle/fluid/inference/api/paddle_inference_api.h"
 #include "paddle/fluid/inference/api/paddle_inference_pass.h"
+#include "paddle/fluid/inference/api/paddle_quantizer_config.h"
 #include "paddle/fluid/inference/utils/singleton.h"
 #include "paddle/fluid/memory/memcpy.h"
 #include "paddle/fluid/platform/cpu_helper.h"
 #include "paddle/fluid/platform/gpu_info.h"
+#include "paddle/fluid/platform/place.h"
 #include "paddle/fluid/platform/profiler.h"
 
 #if PADDLE_WITH_TENSORRT
@@ -48,6 +51,256 @@
 DECLARE_bool(profile);
 
 namespace paddle {
+
+using paddle::platform::CPUPlace;
+using paddle::framework::LoDTensor;
+using ConstEigenVectorArrayMap =
+    Eigen::Map<const Eigen::Array<float, Eigen::Dynamic, 1>>;
+
+namespace {
+
+std::pair<QuantMax, LoDTensor> GetMaxScalingFactor(
+    const LoDTensor *var_tensor) {
+  ConstEigenVectorArrayMap eigen_tensor{var_tensor->data<float>(),
+                                        var_tensor->numel(), 1};
+  float min_val = eigen_tensor.minCoeff();
+  bool is_positive = min_val >= 0.0f;
+  auto quant_max = is_positive ? QuantMax::U8_MAX : QuantMax::S8_MAX;
+
+  PADDLE_ENFORCE(quant_max == QuantMax::U8_MAX || quant_max == QuantMax::S8_MAX,
+                 "Quantizer: Only 8 bit quantization is supported now.");
+
+  LoDTensor scale_tensor;
+  scale_tensor.Resize({1});
+  auto *scale_ptr = scale_tensor.mutable_data<float>(CPUPlace());
+
+  float max_abs = eigen_tensor.abs().maxCoeff();
+  scale_ptr[0] = static_cast<float>(static_cast<unsigned>(quant_max) / max_abs);
+
+  return std::make_pair(quant_max, scale_tensor);
+}
+
+// Returns histogram and bin width
+std::pair<std::vector<int>, float> Histogram(
+    ConstEigenVectorArrayMap eigen_tensor, float min_val, float max_val,
+    int num_bins = 2048) {
+  PADDLE_ENFORCE(max_val > min_val,
+                 "Quantizer: To calculate Histogram, max_val (" +
+                     std::to_string(max_val) +
+                     ") must be greater "
+                     "than min_val (" +
+                     std::to_string(min_val) + ").");
+  auto bin_width = (max_val - min_val) / num_bins;
+  std::vector<int> hist(num_bins);
+
+  // TODO(sfraczek): Try #pragma omp parallel for
+  for (int i = 0; i < eigen_tensor.size(); i++) {
+    int bin = static_cast<int>(floor((eigen_tensor[i] - min_val) / bin_width));
+    ++hist[bin];
+  }
+  // TODO(sfraczek): Try the below
+  // auto bin_blob = (eigen_tensor - min_val) / bin_width
+  // for int (i = 0; i < bin_blob.size(); i++)
+  //   hist[bin_blob[i]]=eigen_tensor[i];
+
+  return std::make_pair(std::move(hist), std::move(bin_width));
+}
+
+std::vector<int> ExpandQuantizedBins(std::vector<int> quantized_bins,
+                                     std::vector<int> reference_bins) {
+  std::vector<int> expanded_quantized_bins(reference_bins.size(), 0);
+  int num_merged_bins = reference_bins.size() / quantized_bins.size();
+  int j_start = 0;
+  int j_end = num_merged_bins;
+  for (size_t idx = 0; idx < quantized_bins.size(); idx++) {
+    int zero_count =
+        std::count(&reference_bins[j_start], &reference_bins[j_end], 0);
+    num_merged_bins = j_end - j_start;
+    int avg_bin_ele;
+    if (zero_count == num_merged_bins) {
+      avg_bin_ele = 0;
+    } else {
+      avg_bin_ele = quantized_bins[idx] / (num_merged_bins - zero_count + 0.0);
+    }
+    for (int idx1 = j_start; idx1 < j_end; idx1++) {
+      expanded_quantized_bins[idx1] =
+          (reference_bins[idx1] == 0) ? 0 : avg_bin_ele;
+    }
+    j_start += num_merged_bins;
+    j_end += num_merged_bins;
+    if ((idx + 1) == quantized_bins.size() - 1) {
+      j_end = reference_bins.size();
+    }
+  }
+  return expanded_quantized_bins;
+}
+
+// Calculate the entropy.
+float SafeEntropy(std::vector<int> reference_distr_P, int P_sum,
+                  std::vector<int> candidate_distr_Q, int Q_sum) {
+  PADDLE_ENFORCE_EQ(reference_distr_P.size(), candidate_distr_Q.size());
+  float tmp_sum1 = 0;
+  float tmp_sum2 = 0;
+  for (size_t idx = 0; idx < reference_distr_P.size(); idx++) {
+    int p_idx = reference_distr_P[idx];
+    int q_idx = candidate_distr_Q[idx];
+    if (p_idx == 0) {
+      tmp_sum1 += 0;
+      tmp_sum2 += 0;
+    } else {
+      PADDLE_ENFORCE(q_idx != 0,
+                     "Quantizer: Fatal error!, idx = " + std::to_string(idx) +
+                         " qindex = 0! p_idx = " + std::to_string(p_idx));
+    }
+    tmp_sum1 += p_idx * (log(Q_sum * p_idx));
+    tmp_sum2 += p_idx * (log(P_sum * q_idx));
+  }
+  return (tmp_sum1 - tmp_sum2) / P_sum;
+}
+
+// Using the KL-divergence method get the most precise scaling factor.
+std::pair<QuantMax, LoDTensor> GetKLScalingFactor(const LoDTensor *var_tensor) {
+  ConstEigenVectorArrayMap eigen_tensor{var_tensor->data<float>(),
+                                        var_tensor->numel(), 1};
+  int precision_hist_num_bins = 2048;
+  float max_val = eigen_tensor.maxCoeff();
+  float min_val = eigen_tensor.minCoeff();
+  bool is_positive = min_val >= 0.0f;
+  auto quant_max = is_positive ? QuantMax::U8_MAX : QuantMax::S8_MAX;
+
+  PADDLE_ENFORCE(quant_max == QuantMax::U8_MAX || quant_max == QuantMax::S8_MAX,
+                 "Quantizer: Only 8 bit quantization is supported now.");
+  int num_quantized_bins = 255;
+
+  std::vector<int> hist;
+  float bin_width;
+  int starting_iter;
+  int ending_iter = precision_hist_num_bins - 1;
+  if (is_positive) {
+    std::tie(hist, bin_width) =
+        Histogram(eigen_tensor, min_val, max_val, precision_hist_num_bins);
+    starting_iter = static_cast<int>(ending_iter * 0.7);
+  } else {
+    float th = std::max(std::abs(max_val), std::abs(min_val));
+    std::tie(hist, bin_width) =
+        Histogram(eigen_tensor, -th, th, precision_hist_num_bins);
+    starting_iter = 0;
+    if (std::abs(max_val) > std::abs(min_val)) {
+      while (starting_iter < ending_iter) {
+        if (hist[starting_iter] == 0) {
+          ++starting_iter;
+          continue;
+        } else {
+          break;
+        }
+      }
+      starting_iter += static_cast<int>((ending_iter - starting_iter) * 0.6);
+    } else {
+      while (ending_iter > 0) {
+        if (hist[ending_iter] == 0) {
+          --ending_iter;
+          continue;
+        } else {
+          break;
+        }
+      }
+      starting_iter = static_cast<int>(0.6 * ending_iter);
+    }
+  }
+  auto P_sum = eigen_tensor.size();
+  int min_kl_divergence = 0;
+  int min_kl_index = 0;
+  bool kl_inited = false;
+  for (int i = starting_iter; i <= ending_iter; i++) {
+    std::vector<int> reference_distr_P(&hist[0], &hist[i]);
+    auto outliers_count =
+        std::accumulate(&hist[i], &hist[precision_hist_num_bins], 0);
+    if (reference_distr_P[i - 1] == 0) {
+      continue;
+    }
+    reference_distr_P[i - 1] += outliers_count;
+    auto reference_distr_bins = reference_distr_P;
+    std::vector<int> candidate_distr_Q(&hist[0], &hist[i]);
+    int num_merged_bins = i / num_quantized_bins;
+    std::vector<int> candidate_distr_Q_quantized(num_quantized_bins, 0);
+    int j_start = 0;
+    int j_end = num_merged_bins;
+    for (int idx = 0; idx < num_quantized_bins; idx++) {
+      candidate_distr_Q_quantized[idx] = std::accumulate(
+          &candidate_distr_Q[j_start], &candidate_distr_Q[j_end], 0);
+      j_start += num_merged_bins;
+      j_end += num_merged_bins;
+      if ((idx + 1) == num_quantized_bins - 1) {
+        j_end = i;
+      }
+    }
+    candidate_distr_Q =
+        ExpandQuantizedBins(candidate_distr_Q_quantized, reference_distr_bins);
+    int Q_sum =
+        std::accumulate(candidate_distr_Q.begin(), candidate_distr_Q.end(), 0);
+    auto kl_divergence =
+        SafeEntropy(reference_distr_P, P_sum, candidate_distr_Q, Q_sum);
+    if (!kl_inited) {
+      min_kl_divergence = kl_divergence;
+      min_kl_index = i;
+      kl_inited = true;
+    } else if (kl_divergence < min_kl_divergence) {
+      min_kl_divergence = kl_divergence;
+      min_kl_index = i;
+    } else {
+    }
+  }
+  if (min_kl_index == 0) {
+    while (starting_iter > 0) {
+      if (hist[starting_iter] == 0) {
+        starting_iter -= 1;
+        continue;
+      } else {
+        break;
+      }
+      min_kl_index = starting_iter;
+    }
+  }
+
+  LoDTensor scale_tensor;
+  scale_tensor.Resize({1});
+  auto *scale_ptr = scale_tensor.mutable_data<float>(CPUPlace());
+
+  scale_ptr[0] = static_cast<float>((min_kl_index + 0.5f) * bin_width);
+
+  return std::make_pair(quant_max, scale_tensor);
+}
+
+}  // namespace
+
+bool AnalysisPredictor::Quantizer::RunQuantizePasses() {
+  Argument argument;
+  PrepareArgument(&argument);
+  Analyzer().Run(&argument);
+  PADDLE_ENFORCE(argument.scope_valid());
+  VLOG(5) << "to prepare executor";
+  ARGUMENT_CHECK_FIELD((&argument), ir_analyzed_program);
+  infer_program_.reset(
+      new framework::ProgramDesc(argument.ir_analyzed_program()));
+  LOG(INFO) << "== optimize 2 end ==";
+  return true;
+}
+
+bool AnalysisPredictor::Quantizer::SaveModel() {
+  // TODO(wojtuss): Add saving model
+  return true;
+}
+
+bool AnalysisPredictor::Quantizer::Quantize() {
+  if (!RunWarmup()) return false;
+  if (!CalculateScales()) return false;
+  // run quantization and optimization passes
+  if (!RunQuantizePasses()) return false;
+  // save quantized model if required
+  if (!SaveModel()) return false;
+
+  return true;
+}
 
 using inference::Singleton;
 #if PADDLE_WITH_TENSORRT
@@ -75,13 +328,13 @@ bool AnalysisPredictor::Init(
   if (FLAGS_profile) {
     LOG(WARNING) << "Profiler is actived, might affect the performance";
     LOG(INFO) << "You can turn off by set gflags '-profile false'";
-    auto tracking_device = config()->use_gpu() ? platform::ProfilerState::kAll
-                                               : platform::ProfilerState::kCPU;
+    auto tracking_device = config_.use_gpu() ? platform::ProfilerState::kAll
+                                             : platform::ProfilerState::kCPU;
     platform::EnableProfiler(tracking_device);
   }
 
   // no matter with or without MKLDNN
-  paddle::platform::SetNumThreads(config()->cpu_math_library_num_threads());
+  paddle::platform::SetNumThreads(config_.cpu_math_library_num_threads());
 
   if (!PrepareScope(parent_scope)) {
     return false;
@@ -100,6 +353,22 @@ bool AnalysisPredictor::Init(
 
   // Get the feed_target_names and fetch_target_names
   PrepareFeedFetch();
+
+  return true;
+}
+
+bool AnalysisPredictor::Quantize() {
+  if (config_.quantizer_enabled()) {
+    auto predictor_run =
+        std::bind(&AnalysisPredictor::Run, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3);
+    framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
+    // initialize quantizer
+    quantizer_.reset(new Quantizer(scope, inference_program_,
+                                   config_.quantizer_config_, predictor_run));
+    // do the quantization
+    if (!quantizer_->Quantize()) return false;
+  }
 
   return true;
 }
@@ -126,11 +395,10 @@ bool AnalysisPredictor::PrepareProgram(
     if (!LoadProgramDesc()) return false;
 
     // If not cloned, the parameters should be loaded.
-    // If config()->ir_optim() is True, parameters is loaded in
+    // If config_.ir_optim() is True, parameters is loaded in
     // OptimizeInferenceProgram(), but other persistable variables
     // (like RAW type var) are not created in scope.
-    // If config()->ir_optim() is False, parameters is loaded in
-    // LoadParameters(),
+    // If config_.ir_optim() is False, parameters is loaded in LoadParameters(),
     // still need to create other persistable variables.
     // So in both case, create persistable variables at first.
     executor_->CreateVariables(*inference_program_, 0, true, sub_scope_);
@@ -138,7 +406,7 @@ bool AnalysisPredictor::PrepareProgram(
     // Optimize the program, and load parameters and modify them in the
     // scope_.
     // This will change the scope_ address.
-    if (config()->ir_optim()) {
+    if (config_.ir_optim()) {
       status_ir_optim_enabled_ = true;
       OptimizeInferenceProgram();
     } else {
@@ -157,9 +425,9 @@ bool AnalysisPredictor::PrepareProgram(
   return true;
 }
 bool AnalysisPredictor::CreateExecutor() {
-  if (config()->use_gpu_) {
+  if (config_.use_gpu_) {
     status_use_gpu_ = true;
-    place_ = paddle::platform::CUDAPlace(config()->device_id_);
+    place_ = paddle::platform::CUDAPlace(config_.device_id_);
   } else {
     place_ = paddle::platform::CPUPlace();
   }
@@ -168,7 +436,7 @@ bool AnalysisPredictor::CreateExecutor() {
 }
 bool AnalysisPredictor::PrepareExecutor() {
   executor_->Prepare(sub_scope_, *inference_program_, 0,
-                     config()->use_feed_fetch_ops_);
+                     config_.use_feed_fetch_ops_);
 
   PADDLE_ENFORCE_NOT_NULL(sub_scope_);
 
@@ -273,7 +541,7 @@ bool AnalysisPredictor::SetFeed(const std::vector<PaddleTensor> &inputs,
     }
     input.set_lod(lod);
     int idx = -1;
-    if (config()->specify_input_name_) {
+    if (config_.specify_input_name_) {
       auto name = inputs[i].name;
       if (feed_names_.find(name) == feed_names_.end()) {
         LOG(ERROR) << "feed names from program do not have name: [" << name
@@ -333,49 +601,136 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
   return true;
 }
 
+bool AnalysisPredictor::Quantizer::RunWarmup() {
+  VLOG(3) << "Predictor: run a quantization warmup iteration";
+  auto warmup_data = config_.warmup_data();
+  PADDLE_ENFORCE_NOT_NULL(warmup_data,
+                          "Warmup data cannot be NULL in the config.");
+
+  // Run the inference program
+  std::vector<PaddleTensor> output_slots;
+  std::cout << "Running warmup iteration." << std::endl;
+  predictor_run_(*warmup_data, &output_slots, config_.warmup_batch_size());
+  std::cout << "Done." << std::endl;
+
+  return true;
+}
+
+bool AnalysisPredictor::Quantizer::CalculateScales() {
+  using VariableNameMap = std::map<std::string, std::vector<std::string>>;
+  std::map<std::string, std::map<std::string, LoDTensor>> gathered_data;
+  for (auto *op : infer_program_->Block(0).AllOps()) {
+    if (op->HasAttr("use_quantizer") &&
+        boost::get<bool>(op->GetAttr("use_quantizer"))) {
+      VariableNameMap connections = op->Inputs();
+      VariableNameMap connections_out = op->Outputs();
+      connections.insert(connections_out.begin(), connections_out.end());
+      for (auto const &conn : connections) {
+        if (conn.second.size() == 0) continue;
+        auto &var_name = conn.second[0];
+        auto *var = scope_->FindVar(var_name);
+        PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
+        PADDLE_ENFORCE(var->IsType<LoDTensor>(),
+                       "Only support lod tensor now.");
+        LoDTensor *var_tensor = var->GetMutable<LoDTensor>();
+
+        CalculateSingleScale(op->Type(), conn.first, var_name, var_tensor);
+      }
+    }
+  }
+
+  return true;
+}
+
+void AnalysisPredictor::Quantizer::CalculateSingleScale(
+    const std::string &op_type_name, const std::string &conn_name,
+    const std::string &var_name, const LoDTensor *var_tensor) {
+  PADDLE_ENFORCE(
+      var_tensor->numel() > 0,
+      "Quantizer: LoDTensor of variable for quantization should not be empty.");
+
+  if (scales_.find(var_name) != scales_.end()) return;
+
+  auto rule = config_.scale_algo(op_type_name, conn_name);
+  switch (rule) {
+    case ScaleAlgo::NONE:
+      return;
+    case ScaleAlgo::MAX: {
+      scales_[var_name] = GetMaxScalingFactor(var_tensor);
+      break;
+    }
+    case ScaleAlgo::KL:
+      scales_[var_name] = GetKLScalingFactor(var_tensor);
+      break;
+    default:
+      throw std::runtime_error("Quantizer: Unexpected ScaleAlgo specified.");
+  }
+}
+
+void AnalysisPredictor::Quantizer::PrepareArgument(Argument *arg) {
+  arg->SetUseGPU(false);
+  arg->SetGPUDeviceId(0);
+  arg->SetEnableMemoryOptim(false);
+  arg->SetStaticMemoryOptim(false);
+  arg->SetStaticMemoryOptimForceUpdate(false);
+  arg->SetMainProgramNotOwned(infer_program_.get());
+  auto graph = std::unique_ptr<Graph>(new Graph(arg->main_program()));
+  arg->SetMainGraph(graph.release());
+  arg->SetScopeNotOwned(scope_);
+  arg->main_graph().Set(framework::ir::kParamScopeAttr,
+                        new framework::Scope *(arg->scope_ptr()));
+  arg->SetIrAnalysisPasses({"infer_clean_graph_pass", "cpu_quantize_pass",
+                            "cpu_quantize_squash_pass",
+                            "cpu_quantize_scale_out_pass"});
+  arg->SetAnalysisPasses({"ir_analysis_pass", "memory_optimize_pass",
+                          "ir_params_sync_among_devices_pass",
+                          "ir_graph_to_program_pass"});
+  arg->SetQuantVarScales(scales_);
+}
+
 void AnalysisPredictor::PrepareArgument() {
-  argument_.SetUseGPU(config()->use_gpu());
-  argument_.SetGPUDeviceId(config()->gpu_device_id());
-  argument_.SetEnableMemoryOptim(config()->enable_memory_optim());
-  argument_.SetStaticMemoryOptim(config()->static_memory_optim_);
+  argument_.SetUseGPU(config_.use_gpu());
+  argument_.SetGPUDeviceId(config_.gpu_device_id());
+  argument_.SetEnableMemoryOptim(config_.enable_memory_optim());
+  argument_.SetStaticMemoryOptim(config_.static_memory_optim_);
   argument_.SetStaticMemoryOptimForceUpdate(
-      config()->static_memory_optim_force_update_);
-  argument_.SetModelFromMemory(config()->model_from_memory_);
+      config_.static_memory_optim_force_update_);
+  argument_.SetModelFromMemory(config_.model_from_memory_);
   // Analyze inference_program
-  if (!config()->model_dir().empty()) {
-    argument_.SetModelDir(config()->model_dir());
+  if (!config_.model_dir().empty()) {
+    argument_.SetModelDir(config_.model_dir());
   } else {
     PADDLE_ENFORCE(
-        !config()->params_file().empty(),
+        !config_.params_file().empty(),
         "Either model_dir or (param_file, prog_file) should be set.");
-    PADDLE_ENFORCE(!config()->prog_file().empty());
-    std::string dir = inference::analysis::GetDirRoot(config()->prog_file());
+    PADDLE_ENFORCE(!config_.prog_file().empty());
+    std::string dir = inference::analysis::GetDirRoot(config_.prog_file());
 
-    argument_.SetModelProgramPath(config()->prog_file());
-    argument_.SetModelParamsPath(config()->params_file());
+    argument_.SetModelProgramPath(config_.prog_file());
+    argument_.SetModelParamsPath(config_.params_file());
   }
 
-  if (config()->use_gpu() && config()->tensorrt_engine_enabled()) {
+  if (config_.use_gpu() && config_.tensorrt_engine_enabled()) {
     LOG(INFO) << "TensorRT subgraph engine is enabled";
     argument_.SetUseTensorRT(true);
-    argument_.SetTensorRtWorkspaceSize(config()->tensorrt_workspace_size_);
-    argument_.SetTensorRtMaxBatchSize(config()->tensorrt_max_batchsize_);
-    argument_.SetTensorRtMinSubgraphSize(config()->tensorrt_min_subgraph_size_);
-    argument_.SetTensorRtPrecisionMode(config()->tensorrt_precision_mode_);
+    argument_.SetTensorRtWorkspaceSize(config_.tensorrt_workspace_size_);
+    argument_.SetTensorRtMaxBatchSize(config_.tensorrt_max_batchsize_);
+    argument_.SetTensorRtMinSubgraphSize(config_.tensorrt_min_subgraph_size_);
+    argument_.SetTensorRtPrecisionMode(config_.tensorrt_precision_mode_);
   }
 
-  if (config()->use_mkldnn_) {
+  if (config_.use_mkldnn_) {
     LOG(INFO) << "MKLDNN is enabled";
-    argument_.SetMKLDNNEnabledOpTypes(config()->mkldnn_enabled_op_types_);
+    argument_.SetMKLDNNEnabledOpTypes(config_.mkldnn_enabled_op_types_);
   }
 
-  auto passes = config()->pass_builder()->AllPasses();
-  if (!config()->ir_optim()) {
+  auto passes = config_.pass_builder()->AllPasses();
+  if (!config_.ir_optim()) {
     passes.clear();
     LOG(INFO) << "ir_optim is turned off, no IR pass will be executed";
   }
   argument_.SetIrAnalysisPasses(passes);
-  argument_.SetAnalysisPasses(config()->pass_builder()->AnalysisPasses());
+  argument_.SetAnalysisPasses(config_.pass_builder()->AnalysisPasses());
   argument_.SetScopeNotOwned(scope_.get());
 }
 
@@ -384,6 +739,12 @@ void AnalysisPredictor::OptimizeInferenceProgram() {
   status_program_optimized_ = true;
 
   PrepareArgument();
+
+  if (config_.quantizer_enabled()) {
+    LOG(INFO) << "quantization is enabled";
+    argument_.SetQuantizeEnabledOpTypes(config_.enabled_op_types());
+  }
+
   Analyzer().Run(&argument_);
 
   PADDLE_ENFORCE(argument_.scope_valid());
@@ -410,8 +771,8 @@ std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<
       LOG(ERROR)
           << "Allocate too much memory for the GPU memory pool, assigned "
           << config.memory_pool_init_size_mb() << " MB";
-      LOG(ERROR) << "Try to shink the value by setting "
-                    "AnalysisConfig::EnableGpu(...)";
+      LOG(ERROR)
+          << "Try to shink the value by setting AnalysisConfig::EnableGpu(...)";
     }
 
     if (fraction_of_gpu_memory >= 0.0f || fraction_of_gpu_memory <= 0.95f) {
@@ -429,6 +790,18 @@ std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<
 
   if (!predictor_p->Init(nullptr)) {
     return nullptr;
+  }
+
+  if (config_.quantizer_enabled()) {
+    auto predictor_run =
+        std::bind(&AnalysisPredictor::Run, this, std::placeholders::_1,
+                  std::placeholders::_2, std::placeholders::_3);
+    framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
+    // initialize quantizer
+    quantizer_.reset(new Quantizer(scope, inference_program_, config_,
+                                   argument_, predictor_run));
+    // do the quantization
+    if (!quantizer_->Quantize()) return false;
   }
 
   return predictor;
@@ -494,29 +867,28 @@ bool AnalysisPredictor::ZeroCopyRun() {
 bool AnalysisPredictor::LoadProgramDesc() {
   // Initialize the inference program
   std::string filename;
-  if (!config()->model_dir().empty()) {
-    filename = config()->model_dir() + "/__model__";
-  } else if (!config()->prog_file().empty() &&
-             !config()->params_file().empty()) {
+  if (!config_.model_dir().empty()) {
+    filename = config_.model_dir() + "/__model__";
+  } else if (!config_.prog_file().empty() && !config_.params_file().empty()) {
     // All parameters are saved in a single file.
     // The file names should be consistent with that used
     // in Python API `fluid.io.save_inference_model`.
-    filename = config()->prog_file();
+    filename = config_.prog_file();
   } else {
-    if (config()->model_dir().empty() && config()->prog_file().empty()) {
+    if (config_.model_dir().empty() && config_.prog_file().empty()) {
       LOG(ERROR)
           << "Either model_dir or (prog_file, param_file) should be set.";
       return false;
     }
     LOG(ERROR) << string::Sprintf(
-        "not valid model path '%s' or program path '%s'.",
-        config()->model_dir(), config()->params_file());
+        "not valid model path '%s' or program path '%s'.", config_.model_dir(),
+        config_.params_file());
     return false;
   }
 
   // Create ProgramDesc
   framework::proto::ProgramDesc proto;
-  if (!config()->model_from_memory()) {
+  if (!config_.model_from_memory()) {
     std::string pb_content;
     // Read binary
     std::ifstream fin(filename, std::ios::in | std::ios::binary);
@@ -530,7 +902,7 @@ bool AnalysisPredictor::LoadProgramDesc() {
 
     proto.ParseFromString(pb_content);
   } else {
-    proto.ParseFromString(config()->prog_file());
+    proto.ParseFromString(config_.prog_file());
   }
   inference_program_.reset(new framework::ProgramDesc(proto));
   return true;
@@ -560,28 +932,27 @@ bool AnalysisPredictor::LoadParameters() {
       new_var->SetLoDLevel(var->GetLoDLevel());
       new_var->SetPersistable(true);
 
-      if (!config()->params_file().empty()) {
+      if (!config_.params_file().empty()) {
         params.push_back(new_var->Name());
       } else {
         // append_op
         framework::OpDesc *op = load_block->AppendOp();
         op->SetType("load");
         op->SetOutput("Out", {new_var->Name()});
-        op->SetAttr("file_path",
-                    {config()->model_dir() + "/" + new_var->Name()});
+        op->SetAttr("file_path", {config_.model_dir() + "/" + new_var->Name()});
         op->CheckAttrs();
       }
     }
   }
 
-  if (!config()->params_file().empty()) {
+  if (!config_.params_file().empty()) {
     // sort paramlist to have consistent ordering
     std::sort(params.begin(), params.end());
     // append just the load_combine op
     framework::OpDesc *op = load_block->AppendOp();
     op->SetType("load_combine");
     op->SetOutput("Out", params);
-    op->SetAttr("file_path", {config()->params_file()});
+    op->SetAttr("file_path", {config_.params_file()});
     op->CheckAttrs();
   }
 
@@ -596,7 +967,7 @@ bool AnalysisPredictor::LoadParameters() {
 
 #if PADDLE_WITH_TENSORRT
 bool AnalysisPredictor::SaveTrtCalibToDisk() {
-  PADDLE_ENFORCE(config()->tensorrt_engine_enabled(),
+  PADDLE_ENFORCE(config_.tensorrt_engine_enabled(),
                  "This func can be invoked only in trt mode");
   auto &block = inference_program_->Block(0);
   for (auto &op_desc : block.AllOps()) {
@@ -649,8 +1020,8 @@ bool AnalysisPredictor::SaveTrtCalibToDisk() {
 
 AnalysisPredictor::~AnalysisPredictor() {
 #if PADDLE_WITH_TENSORRT
-  if (config()->tensorrt_engine_enabled() &&
-      config()->tensorrt_precision_mode_ == AnalysisConfig::Precision::kInt8 &&
+  if (config_.tensorrt_engine_enabled() &&
+      config_.tensorrt_precision_mode_ == AnalysisConfig::Precision::kInt8 &&
       Singleton<TRTCalibratorEngineManager>::Global().Has()) {
     SaveTrtCalibToDisk();
   }
@@ -665,7 +1036,7 @@ AnalysisPredictor::~AnalysisPredictor() {
 
   // TODO(Superjomn) deduce the directory path.
   std::string out_path = inference::analysis::GetMemoryCachePath(
-      config()->model_dir(), config()->prog_file());
+      config_.model_dir(), config_.prog_file());
   if (need_collect_var_shapes_for_memory_optim()) {
     SerializeBatchVarShapes(out_path);
   }
@@ -673,7 +1044,7 @@ AnalysisPredictor::~AnalysisPredictor() {
 
 std::unique_ptr<PaddlePredictor> AnalysisPredictor::Clone() {
   std::lock_guard<std::mutex> lk(clone_mutex_);
-  auto *x = new AnalysisPredictor(*config());
+  auto *x = new AnalysisPredictor(config_);
   x->Init(scope_, inference_program_);
   return std::unique_ptr<PaddlePredictor>(x);
 }
@@ -723,14 +1094,14 @@ bool AnalysisPredictor::need_collect_var_shapes_for_memory_optim() {
   if (need_collect_var_shapes_ >= 0) return need_collect_var_shapes_;
   bool need = false;
   // check if the cache exists
-  if (!config()->enable_memory_optim()) {
+  if (!config_.enable_memory_optim()) {
     need = false;
-  } else if (config()->static_memory_optim_ &&
+  } else if (config_.static_memory_optim_ &&
              !inference::IsFileExists(inference::analysis::GetMemoryCachePath(
-                 config()->model_dir(), config()->prog_file()))) {
+                 config_.model_dir(), config_.prog_file()))) {
     need = true;
-  } else if (config()->static_memory_optim_ &&
-             config()->static_memory_optim_force_update_) {
+  } else if (config_.static_memory_optim_ &&
+             config_.static_memory_optim_force_update_) {
     need = true;
   }
 
