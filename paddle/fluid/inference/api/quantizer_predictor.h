@@ -15,6 +15,7 @@
 #pragma once
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 #include "paddle/fluid/framework/naive_executor.h"
@@ -45,8 +46,9 @@ using framework::NaiveExecutor;
 class QuantizerPredictor : public AnalysisPredictor {
  public:
   QuantizerPredictor() = default;
-  explicit QuantizerPredictor(const QuantizerConfig &config)
-      : config_(config) {}
+  explicit QuantizerPredictor(const QuantizerConfig& config) {
+    config_.reset(new QuantizerConfig(config));
+  }
   ~QuantizerPredictor() = default;
 
   // bool Run(const std::vector<PaddleTensor> &inputs,
@@ -69,8 +71,12 @@ class QuantizerPredictor : public AnalysisPredictor {
   bool Quantize();
 
  protected:
-  // TODO(sfraczek): I may need to keep some of them and remove other
-  QuantizerConfig config_;
+  const std::shared_ptr<QuantizerConfig> config() {
+    return std::static_pointer_cast<QuantizerConfig>(config_);
+  }
+
+ protected:
+  // TODO(sfraczek): I will need to remove quantizer
   std::shared_ptr<inference::analysis::Quantizer> quantizer_;
 };
 

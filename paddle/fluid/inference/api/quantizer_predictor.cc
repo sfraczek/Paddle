@@ -59,13 +59,13 @@ using inference::tensorrt::TRTCalibratorEngineManager;
 using inference::analysis::Quantizer;
 
 bool QuantizerPredictor::Quantize() {
-  if (config_.quantizer_enabled()) {
+  if (config()->quantizer_enabled()) {
     auto predictor_run =
         std::bind(&QuantizerPredictor::Run, this, std::placeholders::_1,
                   std::placeholders::_2, std::placeholders::_3);
     framework::Scope *scope = sub_scope_ ? sub_scope_ : scope_.get();
     // initialize quantizer
-    quantizer_.reset(new Quantizer(scope, inference_program_, config_,
+    quantizer_.reset(new Quantizer(scope, inference_program_, *config(),
                                    argument_, predictor_run));
     // do the quantization
     if (!quantizer_->Quantize()) return false;
@@ -78,15 +78,15 @@ bool QuantizerPredictor::Quantize() {
 void QuantizerPredictor::PrepareArgument() {
   AnalysisPredictor::PrepareArgument();
 
-  if (config_.quantizer_enabled()) {
+  if (config()->quantizer_enabled()) {
     LOG(INFO) << "quantization is enabled";
-    argument_.SetQuantizeEnabledOpTypes(config_.enabled_op_types());
+    argument_.SetQuantizeEnabledOpTypes(config()->enabled_op_types());
   }
 }
 
 std::unique_ptr<PaddlePredictor> QuantizerPredictor::Clone() {
   std::lock_guard<std::mutex> lk(clone_mutex_);
-  auto *x = new QuantizerPredictor(config_);
+  auto *x = new QuantizerPredictor(*config());
   x->Init(scope_, inference_program_);
   return std::unique_ptr<PaddlePredictor>(x);
 }
