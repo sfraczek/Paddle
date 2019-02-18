@@ -75,13 +75,13 @@ bool AnalysisPredictor::Init(
   if (FLAGS_profile) {
     LOG(WARNING) << "Profiler is actived, might affect the performance";
     LOG(INFO) << "You can turn off by set gflags '-profile false'";
-    auto tracking_device = config_.use_gpu() ? platform::ProfilerState::kAll
-                                             : platform::ProfilerState::kCPU;
+    auto tracking_device = config()->use_gpu() ? platform::ProfilerState::kAll
+                                               : platform::ProfilerState::kCPU;
     platform::EnableProfiler(tracking_device);
   }
 
   // no matter with or without MKLDNN
-  paddle::platform::SetNumThreads(config_.cpu_math_library_num_threads());
+  paddle::platform::SetNumThreads(config()->cpu_math_library_num_threads());
 
   if (!PrepareScope(parent_scope)) {
     return false;
@@ -126,10 +126,11 @@ bool AnalysisPredictor::PrepareProgram(
     if (!LoadProgramDesc()) return false;
 
     // If not cloned, the parameters should be loaded.
-    // If config_.ir_optim() is True, parameters is loaded in
+    // If config()->ir_optim() is True, parameters is loaded in
     // OptimizeInferenceProgram(), but other persistable variables
     // (like RAW type var) are not created in scope.
-    // If config_.ir_optim() is False, parameters is loaded in LoadParameters(),
+    // If config()->ir_optim() is False, parameters is loaded in
+    // LoadParameters(),
     // still need to create other persistable variables.
     // So in both case, create persistable variables at first.
     executor_->CreateVariables(*inference_program_, 0, true, sub_scope_);
@@ -137,7 +138,7 @@ bool AnalysisPredictor::PrepareProgram(
     // Optimize the program, and load parameters and modify them in the
     // scope_.
     // This will change the scope_ address.
-    if (config_.ir_optim()) {
+    if (config()->ir_optim()) {
       status_ir_optim_enabled_ = true;
       OptimizeInferenceProgram();
     } else {
@@ -156,9 +157,9 @@ bool AnalysisPredictor::PrepareProgram(
   return true;
 }
 bool AnalysisPredictor::CreateExecutor() {
-  if (config_.use_gpu_) {
+  if (config()->use_gpu_) {
     status_use_gpu_ = true;
-    place_ = paddle::platform::CUDAPlace(config_.device_id_);
+    place_ = paddle::platform::CUDAPlace(config()->device_id_);
   } else {
     place_ = paddle::platform::CPUPlace();
   }
@@ -167,7 +168,7 @@ bool AnalysisPredictor::CreateExecutor() {
 }
 bool AnalysisPredictor::PrepareExecutor() {
   executor_->Prepare(sub_scope_, *inference_program_, 0,
-                     config_.use_feed_fetch_ops_);
+                     config()->use_feed_fetch_ops_);
 
   PADDLE_ENFORCE_NOT_NULL(sub_scope_);
 
@@ -272,7 +273,7 @@ bool AnalysisPredictor::SetFeed(const std::vector<PaddleTensor> &inputs,
     }
     input.set_lod(lod);
     int idx = -1;
-    if (config_.specify_input_name_) {
+    if (config()->specify_input_name_) {
       auto name = inputs[i].name;
       if (feed_names_.find(name) == feed_names_.end()) {
         LOG(ERROR) << "feed names from program do not have name: [" << name
@@ -333,48 +334,48 @@ bool AnalysisPredictor::GetFetch(std::vector<PaddleTensor> *outputs,
 }
 
 void AnalysisPredictor::PrepareArgument() {
-  argument_.SetUseGPU(config_.use_gpu());
-  argument_.SetGPUDeviceId(config_.gpu_device_id());
-  argument_.SetEnableMemoryOptim(config_.enable_memory_optim());
-  argument_.SetStaticMemoryOptim(config_.static_memory_optim_);
+  argument_.SetUseGPU(config()->use_gpu());
+  argument_.SetGPUDeviceId(config()->gpu_device_id());
+  argument_.SetEnableMemoryOptim(config()->enable_memory_optim());
+  argument_.SetStaticMemoryOptim(config()->static_memory_optim_);
   argument_.SetStaticMemoryOptimForceUpdate(
-      config_.static_memory_optim_force_update_);
-  argument_.SetModelFromMemory(config_.model_from_memory_);
+      config()->static_memory_optim_force_update_);
+  argument_.SetModelFromMemory(config()->model_from_memory_);
   // Analyze inference_program
-  if (!config_.model_dir().empty()) {
-    argument_.SetModelDir(config_.model_dir());
+  if (!config()->model_dir().empty()) {
+    argument_.SetModelDir(config()->model_dir());
   } else {
     PADDLE_ENFORCE(
-        !config_.params_file().empty(),
+        !config()->params_file().empty(),
         "Either model_dir or (param_file, prog_file) should be set.");
-    PADDLE_ENFORCE(!config_.prog_file().empty());
-    std::string dir = inference::analysis::GetDirRoot(config_.prog_file());
+    PADDLE_ENFORCE(!config()->prog_file().empty());
+    std::string dir = inference::analysis::GetDirRoot(config()->prog_file());
 
-    argument_.SetModelProgramPath(config_.prog_file());
-    argument_.SetModelParamsPath(config_.params_file());
+    argument_.SetModelProgramPath(config()->prog_file());
+    argument_.SetModelParamsPath(config()->params_file());
   }
 
-  if (config_.use_gpu() && config_.tensorrt_engine_enabled()) {
+  if (config()->use_gpu() && config()->tensorrt_engine_enabled()) {
     LOG(INFO) << "TensorRT subgraph engine is enabled";
     argument_.SetUseTensorRT(true);
-    argument_.SetTensorRtWorkspaceSize(config_.tensorrt_workspace_size_);
-    argument_.SetTensorRtMaxBatchSize(config_.tensorrt_max_batchsize_);
-    argument_.SetTensorRtMinSubgraphSize(config_.tensorrt_min_subgraph_size_);
-    argument_.SetTensorRtPrecisionMode(config_.tensorrt_precision_mode_);
+    argument_.SetTensorRtWorkspaceSize(config()->tensorrt_workspace_size_);
+    argument_.SetTensorRtMaxBatchSize(config()->tensorrt_max_batchsize_);
+    argument_.SetTensorRtMinSubgraphSize(config()->tensorrt_min_subgraph_size_);
+    argument_.SetTensorRtPrecisionMode(config()->tensorrt_precision_mode_);
   }
 
-  if (config_.use_mkldnn_) {
+  if (config()->use_mkldnn_) {
     LOG(INFO) << "MKLDNN is enabled";
-    argument_.SetMKLDNNEnabledOpTypes(config_.mkldnn_enabled_op_types_);
+    argument_.SetMKLDNNEnabledOpTypes(config()->mkldnn_enabled_op_types_);
   }
 
-  auto passes = config_.pass_builder()->AllPasses();
-  if (!config_.ir_optim()) {
+  auto passes = config()->pass_builder()->AllPasses();
+  if (!config()->ir_optim()) {
     passes.clear();
     LOG(INFO) << "ir_optim is turned off, no IR pass will be executed";
   }
   argument_.SetIrAnalysisPasses(passes);
-  argument_.SetAnalysisPasses(config_.pass_builder()->AnalysisPasses());
+  argument_.SetAnalysisPasses(config()->pass_builder()->AnalysisPasses());
   argument_.SetScopeNotOwned(scope_.get());
 }
 
@@ -493,28 +494,29 @@ bool AnalysisPredictor::ZeroCopyRun() {
 bool AnalysisPredictor::LoadProgramDesc() {
   // Initialize the inference program
   std::string filename;
-  if (!config_.model_dir().empty()) {
-    filename = config_.model_dir() + "/__model__";
-  } else if (!config_.prog_file().empty() && !config_.params_file().empty()) {
+  if (!config()->model_dir().empty()) {
+    filename = config()->model_dir() + "/__model__";
+  } else if (!config()->prog_file().empty() &&
+             !config()->params_file().empty()) {
     // All parameters are saved in a single file.
     // The file names should be consistent with that used
     // in Python API `fluid.io.save_inference_model`.
-    filename = config_.prog_file();
+    filename = config()->prog_file();
   } else {
-    if (config_.model_dir().empty() && config_.prog_file().empty()) {
+    if (config()->model_dir().empty() && config()->prog_file().empty()) {
       LOG(ERROR)
           << "Either model_dir or (prog_file, param_file) should be set.";
       return false;
     }
     LOG(ERROR) << string::Sprintf(
-        "not valid model path '%s' or program path '%s'.", config_.model_dir(),
-        config_.params_file());
+        "not valid model path '%s' or program path '%s'.",
+        config()->model_dir(), config()->params_file());
     return false;
   }
 
   // Create ProgramDesc
   framework::proto::ProgramDesc proto;
-  if (!config_.model_from_memory()) {
+  if (!config()->model_from_memory()) {
     std::string pb_content;
     // Read binary
     std::ifstream fin(filename, std::ios::in | std::ios::binary);
@@ -528,7 +530,7 @@ bool AnalysisPredictor::LoadProgramDesc() {
 
     proto.ParseFromString(pb_content);
   } else {
-    proto.ParseFromString(config_.prog_file());
+    proto.ParseFromString(config()->prog_file());
   }
   inference_program_.reset(new framework::ProgramDesc(proto));
   return true;
@@ -558,27 +560,28 @@ bool AnalysisPredictor::LoadParameters() {
       new_var->SetLoDLevel(var->GetLoDLevel());
       new_var->SetPersistable(true);
 
-      if (!config_.params_file().empty()) {
+      if (!config()->params_file().empty()) {
         params.push_back(new_var->Name());
       } else {
         // append_op
         framework::OpDesc *op = load_block->AppendOp();
         op->SetType("load");
         op->SetOutput("Out", {new_var->Name()});
-        op->SetAttr("file_path", {config_.model_dir() + "/" + new_var->Name()});
+        op->SetAttr("file_path",
+                    {config()->model_dir() + "/" + new_var->Name()});
         op->CheckAttrs();
       }
     }
   }
 
-  if (!config_.params_file().empty()) {
+  if (!config()->params_file().empty()) {
     // sort paramlist to have consistent ordering
     std::sort(params.begin(), params.end());
     // append just the load_combine op
     framework::OpDesc *op = load_block->AppendOp();
     op->SetType("load_combine");
     op->SetOutput("Out", params);
-    op->SetAttr("file_path", {config_.params_file()});
+    op->SetAttr("file_path", {config()->params_file()});
     op->CheckAttrs();
   }
 
@@ -593,7 +596,7 @@ bool AnalysisPredictor::LoadParameters() {
 
 #if PADDLE_WITH_TENSORRT
 bool AnalysisPredictor::SaveTrtCalibToDisk() {
-  PADDLE_ENFORCE(config_.tensorrt_engine_enabled(),
+  PADDLE_ENFORCE(config()->tensorrt_engine_enabled(),
                  "This func can be invoked only in trt mode");
   auto &block = inference_program_->Block(0);
   for (auto &op_desc : block.AllOps()) {
@@ -646,8 +649,8 @@ bool AnalysisPredictor::SaveTrtCalibToDisk() {
 
 AnalysisPredictor::~AnalysisPredictor() {
 #if PADDLE_WITH_TENSORRT
-  if (config_.tensorrt_engine_enabled() &&
-      config_.tensorrt_precision_mode_ == AnalysisConfig::Precision::kInt8 &&
+  if (config()->tensorrt_engine_enabled() &&
+      config()->tensorrt_precision_mode_ == AnalysisConfig::Precision::kInt8 &&
       Singleton<TRTCalibratorEngineManager>::Global().Has()) {
     SaveTrtCalibToDisk();
   }
@@ -662,7 +665,7 @@ AnalysisPredictor::~AnalysisPredictor() {
 
   // TODO(Superjomn) deduce the directory path.
   std::string out_path = inference::analysis::GetMemoryCachePath(
-      config_.model_dir(), config_.prog_file());
+      config()->model_dir(), config()->prog_file());
   if (need_collect_var_shapes_for_memory_optim()) {
     SerializeBatchVarShapes(out_path);
   }
@@ -670,7 +673,7 @@ AnalysisPredictor::~AnalysisPredictor() {
 
 std::unique_ptr<PaddlePredictor> AnalysisPredictor::Clone() {
   std::lock_guard<std::mutex> lk(clone_mutex_);
-  auto *x = new AnalysisPredictor(config_);
+  auto *x = new AnalysisPredictor(*config());
   x->Init(scope_, inference_program_);
   return std::unique_ptr<PaddlePredictor>(x);
 }
@@ -720,14 +723,14 @@ bool AnalysisPredictor::need_collect_var_shapes_for_memory_optim() {
   if (need_collect_var_shapes_ >= 0) return need_collect_var_shapes_;
   bool need = false;
   // check if the cache exists
-  if (!config_.enable_memory_optim()) {
+  if (!config()->enable_memory_optim()) {
     need = false;
-  } else if (config_.static_memory_optim_ &&
+  } else if (config()->static_memory_optim_ &&
              !inference::IsFileExists(inference::analysis::GetMemoryCachePath(
-                 config_.model_dir(), config_.prog_file()))) {
+                 config()->model_dir(), config()->prog_file()))) {
     need = true;
-  } else if (config_.static_memory_optim_ &&
-             config_.static_memory_optim_force_update_) {
+  } else if (config()->static_memory_optim_ &&
+             config()->static_memory_optim_force_update_) {
     need = true;
   }
 

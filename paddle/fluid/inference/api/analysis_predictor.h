@@ -15,6 +15,7 @@
 #pragma once
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 #include "paddle/fluid/framework/naive_executor.h"
@@ -44,7 +45,8 @@ using framework::NaiveExecutor;
 class AnalysisPredictor : public PaddlePredictor {
  public:
   AnalysisPredictor() = default;
-  explicit AnalysisPredictor(const AnalysisConfig &config) : config_(config) {}
+  explicit AnalysisPredictor(const AnalysisConfig &config)
+      : config_(new AnalysisConfig(config)) {}
   ~AnalysisPredictor();
 
   bool Init(const std::shared_ptr<framework::Scope> &parent_scope,
@@ -102,6 +104,8 @@ class AnalysisPredictor : public PaddlePredictor {
   void GetFetchOne(const framework::LoDTensor &fetchs,
                    PaddleTensor *output_data);
 
+  const std::shared_ptr<AnalysisConfig> config() { return config_; }
+
 #if PADDLE_WITH_TENSORRT
   // When we use Paddle-TRT INT8 engine, we need to generate calibration table
   // data first,
@@ -126,7 +130,7 @@ class AnalysisPredictor : public PaddlePredictor {
 #endif
 
  protected:  // TODO(sfraczek): can be changed to private?
-  AnalysisConfig config_;
+  std::shared_ptr<AnalysisConfig> config_;
   Argument argument_;
   std::unique_ptr<NaiveExecutor> executor_;
   platform::Place place_;
