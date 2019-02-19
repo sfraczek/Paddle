@@ -98,13 +98,14 @@ TEST(Analyzer_resnet50, quantization) {
       std::make_shared<std::vector<PaddleTensor>>(input_slots_all[0]);
   // std::vector<PaddleTensor>(input_slots_all[0]));
 
-  QuantizerConfig cfg;
+  AnalysisConfig cfg;
   SetConfig(static_cast<AnalysisConfig *>(&cfg));
   cfg.EnableMKLDNN();
   cfg.EnableQuantizer();
-  cfg.SetWarmupData(warmup_data);
-  cfg.SetWarmupBatchSize(warmup_data->front().shape.front());
-  cfg.SetEnabledOpTypes({"conv2d", "pool2d"});
+  cfg.quantizer_config()->SetWarmupData(warmup_data);
+  cfg.quantizer_config()->SetWarmupBatchSize(
+      warmup_data->front().shape.front());
+  cfg.quantizer_config()->SetEnabledOpTypes({"conv2d", "pool2d"});
 
   CompareNativeAndAnalysis(&cfg, input_slots_all);
 }
