@@ -318,11 +318,12 @@ void AnalysisPredictor::Quantizer::CalculateSingleScale(
 
 void AnalysisPredictor::Quantizer::PrepareArgument() {
   auto& arg = predictor_.argument_;
+  if (!arg.scope_valid()) arg.SetScope(new framework::Scope);
+  arg.SetMainProgramNotOwned(predictor_.inference_program_.get());
   auto graph = std::unique_ptr<Graph>(new Graph(arg.main_program()));
   arg.SetMainGraph(graph.release());
-  // arg.SetScopeNotOwned(predictor_.scope_);
-  // arg.main_graph().Set(framework::ir::kParamScopeAttr,
-  // new framework::Scope*(arg->scope_ptr()));
+  arg.main_graph().Set(framework::ir::kParamScopeAttr,
+                       new framework::Scope*(arg.scope_ptr()));
 
   auto* builder = predictor_.config_.pass_builder();
   for (int i = builder->AllPasses().size() - 1; i >= 0; --i)
@@ -366,6 +367,8 @@ bool AnalysisPredictor::Quantizer::Quantize() {
   if (!CalculateScales()) return false;
   // run quantization and optimization passes
   if (!RunQuantizePasses()) return false;
+  predictor_.PrepareExecutor();
+  predictor_.PrepareFeedFetch();
   // save quantized model if required
   if (!SaveModel()) return false;
 
