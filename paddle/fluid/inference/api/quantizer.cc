@@ -277,7 +277,7 @@ bool AnalysisPredictor::Quantizer::CalculateScales() {
       for (auto const& conn : connections) {
         if (conn.second.size() == 0) continue;
         auto& var_name = conn.second[0];
-        auto* var = predictor_.scope_->FindVar(var_name);
+        auto* var = predictor_.sub_scope_->FindVar(var_name);
         PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
         PADDLE_ENFORCE(var->IsType<LoDTensor>(),
                        "Only support lod tensor now.");

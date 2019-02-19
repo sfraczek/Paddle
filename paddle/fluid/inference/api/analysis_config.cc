@@ -146,8 +146,8 @@ void AnalysisConfig::EnableMKLDNN() {
 }
 
 void AnalysisConfig::EnableQuantizer() {
-  use_quantizer_ = true;
   if (!quantizer_config_) quantizer_config_.reset(new QuantizerConfig());
+  use_quantizer_ = true;
 
   Update();
 }

@@ -87,7 +87,7 @@ class AnalysisPredictor : public PaddlePredictor {
 
   // Helper class to perform quantization
   class Quantizer;
-  std::shared_ptr<Quantizer> quantizer() { return quantizer_; }
+  std::shared_ptr<Quantizer> &quantizer() { return quantizer_; }
 
  protected:
   // For memory optimization.
@@ -169,8 +169,10 @@ class AnalysisPredictor : public PaddlePredictor {
 class AnalysisPredictor::Quantizer {
  public:
   explicit Quantizer(AnalysisPredictor &predictor,
-                     const std::shared_ptr<QuantizerConfig> qconfig)
-      : predictor_(predictor), qconfig_(qconfig) {}
+                     const std::shared_ptr<QuantizerConfig> &qconfig)
+      : predictor_(predictor), qconfig_(qconfig) {
+    std::cout << "Quantizer constructor" << std::endl;
+  }
 
   // Execute full quantization procedure.
   bool Quantize();
