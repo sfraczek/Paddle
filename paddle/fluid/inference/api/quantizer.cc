@@ -12,24 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "paddle/fluid/inference/analysis/quantizer.h"
 #include <algorithm>
 #include <map>
 #include <numeric>
 #include <utility>
 #include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/framework/ir/fuse_pass_base.h"
+#include "paddle/fluid/framework/ir/graph.h"
 #include "paddle/fluid/framework/ir/pass.h"
 #include "paddle/fluid/framework/operator.h"
 #include "paddle/fluid/framework/type_defs.h"
 #include "paddle/fluid/inference/analysis/analyzer.h"
+#include "paddle/fluid/inference/api/analysis_predictor.h"
 #include "paddle/fluid/platform/place.h"
 
 namespace paddle {
-namespace inference {
-namespace analysis {
 
 using platform::CPUPlace;
+using framework::LoDTensor;
+using framework::ir::Graph;
 using ConstEigenVectorArrayMap =
     Eigen::Map<const Eigen::Array<float, Eigen::Dynamic, 1>>;
 
@@ -249,25 +250,25 @@ std::pair<QuantMax, LoDTensor> GetKLScalingFactor(const LoDTensor* var_tensor) {
 
 }  // namespace
 
-bool Quantizer::RunWarmup() {
+bool AnalysisPredictor::Quantizer::RunWarmup() {
   VLOG(3) << "Predictor: run a quantization warmup iteration";
-  auto warmup_data = config_.warmup_data();
+  auto warmup_data = qconfig_->warmup_data();
   PADDLE_ENFORCE_NOT_NULL(warmup_data,
                           "Warmup data cannot be NULL in the config.");
 
   // Run the inference program
   std::vector<PaddleTensor> output_slots;
   std::cout << "Running warmup iteration." << std::endl;
-  predictor_run_(*warmup_data, &output_slots, config_.warmup_batch_size());
+  predictor_.Run(*warmup_data, &output_slots, qconfig_->warmup_batch_size());
   std::cout << "Done." << std::endl;
 
   return true;
 }
 
-bool Quantizer::CalculateScales() {
+bool AnalysisPredictor::Quantizer::CalculateScales() {
   using VariableNameMap = std::map<std::string, std::vector<std::string>>;
   std::map<std::string, std::map<std::string, LoDTensor>> gathered_data;
-  for (auto* op : infer_program_->Block(0).AllOps()) {
+  for (auto* op : predictor_.inference_program_->Block(0).AllOps()) {
     if (op->HasAttr("use_quantizer") &&
         boost::get<bool>(op->GetAttr("use_quantizer"))) {
       VariableNameMap connections = op->Inputs();
@@ -276,7 +277,7 @@ bool Quantizer::CalculateScales() {
       for (auto const& conn : connections) {
         if (conn.second.size() == 0) continue;
         auto& var_name = conn.second[0];
-        auto* var = scope_->FindVar(var_name);
+        auto* var = predictor_.scope_->FindVar(var_name);
         PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
         PADDLE_ENFORCE(var->IsType<LoDTensor>(),
                        "Only support lod tensor now.");
@@ -290,17 +291,16 @@ bool Quantizer::CalculateScales() {
   return true;
 }
 
-void Quantizer::CalculateSingleScale(const std::string& op_type_name,
-                                     const std::string& conn_name,
-                                     const std::string& var_name,
-                                     const LoDTensor* var_tensor) {
+void AnalysisPredictor::Quantizer::CalculateSingleScale(
+    const std::string& op_type_name, const std::string& conn_name,
+    const std::string& var_name, const LoDTensor* var_tensor) {
   PADDLE_ENFORCE(
       var_tensor->numel() > 0,
       "Quantizer: LoDTensor of variable for quantization should not be empty.");
 
   if (scales_.find(var_name) != scales_.end()) return;
 
-  auto rule = config_.scale_algo(op_type_name, conn_name);
+  auto rule = qconfig_->scale_algo(op_type_name, conn_name);
   switch (rule) {
     case ScaleAlgo::NONE:
       return;
@@ -316,55 +316,52 @@ void Quantizer::CalculateSingleScale(const std::string& op_type_name,
   }
 }
 
-void Quantizer::PrepareArgument(Argument* arg) {
-  arg->SetUseGPU(false);
-  arg->SetGPUDeviceId(0);
-  arg->SetEnableMemoryOptim(false);
-  arg->SetStaticMemoryOptim(false);
-  arg->SetStaticMemoryOptimForceUpdate(false);
-  arg->SetMainProgramNotOwned(infer_program_.get());
-  auto graph = std::unique_ptr<Graph>(new Graph(arg->main_program()));
-  arg->SetMainGraph(graph.release());
-  arg->SetScopeNotOwned(scope_);
-  arg->main_graph().Set(framework::ir::kParamScopeAttr,
-                        new framework::Scope*(arg->scope_ptr()));
+void AnalysisPredictor::Quantizer::PrepareArgument() {
+  auto& arg = predictor_.argument_;
+  auto graph = std::unique_ptr<Graph>(new Graph(arg.main_program()));
+  arg.SetMainGraph(graph.release());
+  // arg.SetScopeNotOwned(predictor_.scope_);
+  // arg.main_graph().Set(framework::ir::kParamScopeAttr,
+  // new framework::Scope*(arg->scope_ptr()));
 
-  for (int i = aconfig_.pass_builder()->AllPasses().size() - 1; i >= 0; --i)
-    aconfig_.pass_builder()->DeletePass(i);
+  auto* builder = predictor_.config_.pass_builder();
+  for (int i = builder->AllPasses().size() - 1; i >= 0; --i)
+    builder->DeletePass(i);
+  builder->AnalysisPasses().clear();
 
-  aconfig_.pass_builder()->AppendPass("infer_clean_graph_pass");
-  aconfig_.pass_builder()->AppendPass("cpu_quantize_pass");
-  aconfig_.pass_builder()->AppendPass("cpu_quantize_squash_pass");
-  aconfig_.pass_builder()->AppendPass("cpu_quantize_scale_out_pass");
-  aconfig_.pass_builder()->TurnOnDebug();
-  auto passes = aconfig_.pass_builder()->AllPasses();
-  arg->SetIrAnalysisPasses(passes);
-
-  arg->SetAnalysisPasses({"ir_analysis_pass", "memory_optimize_pass",
-                          "ir_params_sync_among_devices_pass",
-                          "ir_graph_to_program_pass"});
-  arg->SetQuantVarScales(scales_);
+  builder->AppendPass("infer_clean_graph_pass");
+  builder->AppendPass("cpu_quantize_pass");
+  builder->AppendPass("cpu_quantize_squash_pass");
+  builder->AppendPass("cpu_quantize_scale_out_pass");
+  if (predictor_.config_.ir_debug_) builder->TurnOnDebug();
+  auto passes = builder->AllPasses();
+  predictor_.argument_.SetIrAnalysisPasses(passes);
+  predictor_.argument_.SetAnalysisPasses(
+      {"ir_analysis_pass", "memory_optimize_pass",
+       "ir_params_sync_among_devices_pass", "ir_graph_to_program_pass"});
+  predictor_.argument_.SetQuantVarScales(scales_);
 }
 
-bool Quantizer::RunQuantizePasses() {
-  Argument argument;
-  PrepareArgument(&argument);
-  Analyzer().Run(&argument);
-  PADDLE_ENFORCE(argument.scope_valid());
+bool AnalysisPredictor::Quantizer::RunQuantizePasses() {
+  // Argument argument;
+  PrepareArgument();
+  auto& arg = predictor_.argument_;
+  Analyzer().Run(&arg);
+  PADDLE_ENFORCE(arg.scope_valid());
   VLOG(5) << "to prepare executor";
-  ARGUMENT_CHECK_FIELD((&argument), ir_analyzed_program);
-  infer_program_.reset(
-      new framework::ProgramDesc(argument.ir_analyzed_program()));
+  ARGUMENT_CHECK_FIELD((&arg), ir_analyzed_program);
+  predictor_.inference_program_.reset(
+      new framework::ProgramDesc(arg.ir_analyzed_program()));
   LOG(INFO) << "== optimize 2 end ==";
   return true;
 }
 
-bool Quantizer::SaveModel() {
+bool AnalysisPredictor::Quantizer::SaveModel() {
   // TODO(wojtuss): Add saving model
   return true;
 }
 
-bool Quantizer::Quantize() {
+bool AnalysisPredictor::Quantizer::Quantize() {
   if (!RunWarmup()) return false;
   if (!CalculateScales()) return false;
   // run quantization and optimization passes
@@ -375,6 +372,4 @@ bool Quantizer::Quantize() {
   return true;
 }
 
-}  // namespace analysis
-}  // namespace inference
 }  // namespace paddle

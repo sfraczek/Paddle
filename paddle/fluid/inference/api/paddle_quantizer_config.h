@@ -44,11 +44,11 @@ struct QuantizerConfig {
    * operator type.
    * @param op_type_name the operator's name.
    * @param conn_name name of the connection (input/output) of the operator.
-   * @param alg the algorithm for computing scale.
+   * @param algo the algorithm for computing scale.
    */
   void SetScaleAlgo(std::string op_type_name, std::string conn_name,
-                    ScaleAlgo alg) {
-    rules_[op_type_name][conn_name] = alg;
+                    ScaleAlgo algo) {
+    rules_[op_type_name][conn_name] = algo;
   }
 
   /** Get the quantization algorithm for a connection (input/output) of the
@@ -74,9 +74,9 @@ struct QuantizerConfig {
     return warmup_data_;
   }
 
-  void SetWarmupBatchSize(int batch_size) { warmup_bs = batch_size; }
+  void SetWarmupBatchSize(int batch_size) { warmup_bs_ = batch_size; }
 
-  int warmup_batch_size() const { return warmup_bs; }
+  int warmup_batch_size() const { return warmup_bs_; }
 
   void SetEnabledOpTypes(std::unordered_set<std::string> op_list) {
     enabled_op_types_ = op_list;
@@ -86,11 +86,15 @@ struct QuantizerConfig {
     return enabled_op_types_;
   }
 
+  void SetDefaultScaleAlgo(ScaleAlgo algo) { default_scale_algo_ = algo; }
+  ScaleAlgo default_scale_algo() const { return default_scale_algo_; }
+
  protected:
   std::map<std::string, std::map<std::string, ScaleAlgo>> rules_;
   std::unordered_set<std::string> enabled_op_types_;
   std::shared_ptr<std::vector<PaddleTensor>> warmup_data_;
-  int warmup_bs{1};
+  int warmup_bs_{1};
+  ScaleAlgo default_scale_algo_{ScaleAlgo::MAX};
 };
 
 }  // namespace paddle

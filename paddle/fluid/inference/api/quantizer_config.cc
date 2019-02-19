@@ -33,7 +33,7 @@ ScaleAlgo QuantizerConfig::scale_algo(const std::string& op_type_name,
     auto op_rule = rules_.at(op_type_name);
     if (op_rule.find(conn_name) != op_rule.end()) return op_rule.at(conn_name);
   }
-  return ScaleAlgo::MAX;
+  return default_scale_algo_;
 }
 
 }  // namespace paddle

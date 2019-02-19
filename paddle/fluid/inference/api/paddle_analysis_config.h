@@ -183,7 +183,7 @@ struct AnalysisConfig {
   */
   bool quantizer_enabled() const { return use_quantizer_; }
 
-  std::shared_ptr<QuantizerConfig> GetQuantizerConfig();
+  std::shared_ptr<QuantizerConfig> quantizer_config() const;
 
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.

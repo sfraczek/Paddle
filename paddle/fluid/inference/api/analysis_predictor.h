@@ -85,49 +85,11 @@ class AnalysisPredictor : public PaddlePredictor {
 
   std::string GetSeriazlizedProgram() const override;
 
+  // Helper class to perform quantization
+  class Quantizer;
+  std::shared_ptr<Quantizer> quantizer() { return quantizer_; }
+
  protected:
-  /* Class that performs quantization by running warm-up, calculating
-   * scales and quantizing the graph by running quantize passes.
-   */
-  class Quantizer {
-    explicit Quantizer(framework::Scope *scope,
-                       std::shared_ptr<ProgramDesc> infer_program,
-                       const QuantizerConfig &config, const Argument &aargument,
-                       PredictorRun predictor_run)
-        : scope_(scope),
-          infer_program_(infer_program),
-          config_(config),
-          aargument_(aargument),
-          predictor_run_(predictor_run) {}
-
-    // Execute full quantization procedure.
-    bool Quantize();
-
-   private:
-    // Run single warmup iteration
-    bool RunWarmup();
-    // Gather data from variables and calculate scales for them.
-    bool CalculateScales();
-    // Calculate a scale for tensor based on ScaleAlgo rules.
-    void CalculateSingleScale(const std::string &op_name,
-                              const std::string &conn_name,
-                              const std::string &var_name,
-                              const framework::LoDTensor *var_tensor);
-    void PrepareArgument(Argument *arg);
-    bool RunQuantizePasses();
-    bool SaveModel();
-
-   private:
-    framework::Scope *scope_;
-    std::shared_ptr<ProgramDesc> infer_program_;
-    const QuantizerConfig &config_;
-    const Argument &aargument_;
-    PredictorRun predictor_run_;
-
-    // variable name -> data
-    VarQuantMaxAndScale scales_;
-  };
-
   // For memory optimization.
   bool need_collect_var_shapes_for_memory_optim();
   void CollectVarShapes();
@@ -173,7 +135,6 @@ class AnalysisPredictor : public PaddlePredictor {
 #endif
 
  private:
-  std::shared_ptr<Quantizer> quantizer_;
   AnalysisConfig config_;
   Argument argument_;
   std::unique_ptr<NaiveExecutor> executor_;
@@ -181,6 +142,7 @@ class AnalysisPredictor : public PaddlePredictor {
   std::shared_ptr<framework::Scope> scope_;
   framework::Scope *sub_scope_{nullptr};
   std::shared_ptr<framework::ProgramDesc> inference_program_;
+  std::shared_ptr<Quantizer> quantizer_;
   std::vector<framework::OpDesc *> feeds_;
   std::map<std::string, size_t> feed_names_;
   std::vector<framework::OpDesc *> fetches_;
@@ -202,6 +164,37 @@ class AnalysisPredictor : public PaddlePredictor {
   bool status_is_cloned_{false};
   bool status_use_gpu_{false};
   bool status_ir_optim_enabled_{false};
+};
+
+class AnalysisPredictor::Quantizer {
+ public:
+  explicit Quantizer(AnalysisPredictor &predictor,
+                     const std::shared_ptr<QuantizerConfig> qconfig)
+      : predictor_(predictor), qconfig_(qconfig) {}
+
+  // Execute full quantization procedure.
+  bool Quantize();
+
+ private:
+  // Run single warmup iteration
+  bool RunWarmup();
+  // Gather data from variables and calculate scales for them.
+  bool CalculateScales();
+  // Calculate a scale for tensor based on ScaleAlgo rules.
+  void CalculateSingleScale(const std::string &op_name,
+                            const std::string &conn_name,
+                            const std::string &var_name,
+                            const framework::LoDTensor *var_tensor);
+  void PrepareArgument();
+  bool RunQuantizePasses();
+  bool SaveModel();
+
+ private:
+  AnalysisPredictor &predictor_;
+  const std::shared_ptr<QuantizerConfig> qconfig_;
+
+  // variable name -> data
+  VarQuantMaxAndScale scales_;
 };
 
 }  // namespace paddle

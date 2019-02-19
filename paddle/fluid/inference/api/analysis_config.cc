@@ -152,8 +152,8 @@ void AnalysisConfig::EnableQuantizer() {
   Update();
 }
 
-std::shared_ptr<QuantizerConfig> AnalysisConfig::GetQuantizerConfig() {
-  if (!quantizer_config_) quantizer_config_.reset(new QuantizerConfig());
+std::shared_ptr<QuantizerConfig> AnalysisConfig::quantizer_config() const {
+  PADDLE_ENFORCE_NOT_NULL(quantizer_config_, "Quantizer was not enabled yet.");
   return quantizer_config_;
 }
 
