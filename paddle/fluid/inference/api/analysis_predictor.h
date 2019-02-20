@@ -189,7 +189,7 @@ class AnalysisPredictor::Quantizer {
                             const framework::LoDTensor *var_tensor);
   void PrepareArgument();
   bool RunQuantizePasses();
-  bool SaveModel();
+  bool SaveModel() const;
 
  private:
   AnalysisPredictor &predictor_;

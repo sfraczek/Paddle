@@ -43,9 +43,12 @@ std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
     std::unique_ptr<ir::Graph> graph) const {
   VLOG(3) << "Quantizes the graph.";
   std::cout << "--- This is cpu quantize pass. ---" << std::endl;
+  PADDLE_ENFORCE(graph.get());
+  FusePassBase::Init(name_scope_, graph.get());
+
   /*
-   *   PADDLE_ENFORCE(graph.get());
-   *   FusePassBase::Init(name_scope_, graph.get());
+   *   auto* scope = param_scope();
+   *   PADDLE_ENFORCE(scope);
    *
    *   GraphPatternDetector gpd;
    *   auto pattern = gpd.mutable_pattern();
@@ -67,34 +70,74 @@ std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
    *         !boost::get<bool>(conv_op_desc->GetAttr("use_quantizer")))
    *       return;
    *
-   *     // insert quantize op
+   *     // insert quantize and dequantize op
    *
-   *     // Create eltwise_y (conv bias) variable
-   *     VarDesc quantize_out_desc(
-   *         patterns::PDNodeName(name_scope_, "quantize_out"));
+   *     auto* conv_input_tensor =
+   *         scope->Var(conv_input->Name())->GetMutable<LoDTensor>();
+   *     auto* conv_output_tensor =
+   *         scope->Var(conv_output->Name())->GetMutable<LoDTensor>();
+   *
+   *     // Create and initialize quantize output variable
+   *     VarDesc quantize_out_desc(patterns::PDNodeName("quantize",
+   * "quantize_out"));
    *     auto* quantize_out_node = g->CreateVarNode(&quantize_out_desc);
+   *     auto* quantize_out_tensor =
+   *         scope->Var(quantize_out_node->Name())->GetMutable<LoDTensor>();
+   *     quantize_out_tensor->Resize(conv_input_tensor->dims());
+   *     std::fill_n(quantize_out_tensor->mutable_data<int8_t>(platform::CPUPlace()),
+   *                 quantize_out_tensor->numel(), 0);
+   *
+   *     // Create dequantize input variable
+   *     VarDesc dequantize_in_desc(
+   *         patterns::PDNodeName("dequantize", "dequantize_in"));
+   *     auto* dequantize_in_node = g->CreateVarNode(&dequantize_in_desc);
+   *     auto* dequantize_in_tensor =
+   *         scope->Var(dequantize_in_node->Name())->GetMutable<LoDTensor>();
+   *     dequantize_in_tensor->Resize(conv_output_tensor->dims());
+   *     std::fill_n(
+   *         dequantize_in_tensor->mutable_data<int32_t>(platform::CPUPlace()),
+   *         dequantize_in_tensor->numel(), 0);
    *
    *     // create a quantize op node.
-   *     OpDesc desc;
-   *     desc.SetType("quantize");
-   *     desc.SetInput("Input",
+   *     OpDesc q_desc;
+   *     q_desc.SetType("quantize");
+   *     q_desc.SetInput("Input",
    * std::vector<std::string>({conv_output->Name()}));
-   *     desc.SetOutput("Output",
-   *                    std::vector<std::string>({quantize_out_node->Name()}));
-   *     desc.SetAttr("Scale", 1.0f);
-   *     desc.SetAttr("is_negative_input", true);
-   *     auto quantize_op = g->CreateOpNode(&desc);  // OpDesc will be copied.
+   *     q_desc.SetOutput("Output",
+   *                      std::vector<std::string>({quantize_out_node->Name()}));
+   *     q_desc.SetAttr("Scale", 1.0f);
+   *     q_desc.SetAttr("is_negative_input", true);
+   *     auto quantize_op = g->CreateOpNode(&q_desc);  // OpDesc will be copied.
    *
-   *     // conv_op_desc->SetInput(
-   *     // "Input", std::vector<std::string>({quantize_out_node->Name()}));
-   *     conv_op_desc->SetInput("Input", std::vector<std::string>({"aaa"}));
+   *     // create a dequantize op node.
+   *     OpDesc deq_desc;
+   *     deq_desc.SetType("dequantize");
+   *     deq_desc.SetInput("Input",
+   *                       std::vector<std::string>({dequantize_in_node->Name()}));
+   *     deq_desc.SetOutput("Output",
+   *                        std::vector<std::string>({conv_output->Name()}));
+   *     deq_desc.SetAttr("Scale", 1.0f);
+   *     auto dequantize_op = g->CreateOpNode(&deq_desc);  // OpDesc will be
+   * copied.
    *
-   *     IR_NODE_LINK_TO(conv_input, quantize_op);         // Input
-   *     IR_NODE_LINK_TO(quantize_op, quantize_out_node);  // Output
-   *     IR_NODE_LINK_TO(quantize_out_node, conv_op);      // Output
+   *     conv_op_desc->SetInput(
+   *         "Input", std::vector<std::string>({quantize_out_node->Name()}));
+   *     conv_op_desc->SetOutput(
+   *         "Output", std::vector<std::string>({dequantize_in_node->Name()}));
+   *     // conv_op_desc->SetInput("Input", std::vector<std::string>({"aaa"}));
+   *
+   *     // link quantize op
+   *     IR_NODE_LINK_TO(conv_input, quantize_op);
+   *     IR_NODE_LINK_TO(quantize_op, quantize_out_node);
+   *     IR_NODE_LINK_TO(quantize_out_node, conv_op);
    *     UnlinkNodes(conv_input, conv_op);
    *
-   *     // insert dequantize op
+   *     // link dequantize op
+   *     IR_NODE_LINK_TO(conv_op, dequantize_in_node);
+   *     IR_NODE_LINK_TO(dequantize_in_node, dequantize_op);
+   *     IR_NODE_LINK_TO(dequantize_op, conv_output);
+   *     UnlinkNodes(conv_op, conv_output);
+   *
    *     // quantize weights
    *     // quantize bias
    *     // update op?

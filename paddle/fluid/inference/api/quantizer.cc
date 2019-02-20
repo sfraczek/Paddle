@@ -320,10 +320,6 @@ void AnalysisPredictor::Quantizer::PrepareArgument() {
   auto& arg = predictor_.argument_;
   if (!arg.scope_valid()) arg.SetScope(new framework::Scope);
   arg.SetMainProgramNotOwned(predictor_.inference_program_.get());
-  auto graph = std::unique_ptr<Graph>(new Graph(arg.main_program()));
-  arg.SetMainGraph(graph.release());
-  arg.main_graph().Set(framework::ir::kParamScopeAttr,
-                       new framework::Scope*(arg.scope_ptr()));
 
   auto* builder = predictor_.config_.pass_builder();
   for (int i = builder->AllPasses().size() - 1; i >= 0; --i)
@@ -334,17 +330,17 @@ void AnalysisPredictor::Quantizer::PrepareArgument() {
   builder->AppendPass("cpu_quantize_pass");
   builder->AppendPass("cpu_quantize_squash_pass");
   builder->AppendPass("cpu_quantize_scale_out_pass");
-  if (predictor_.config_.ir_debug_) builder->TurnOnDebug();
+  builder->TurnOnDebug();  // TODO(wojtuss): for development phase
   auto passes = builder->AllPasses();
   predictor_.argument_.SetIrAnalysisPasses(passes);
   predictor_.argument_.SetAnalysisPasses(
-      {"ir_analysis_pass", "memory_optimize_pass",
-       "ir_params_sync_among_devices_pass", "ir_graph_to_program_pass"});
+      {"ir_analysis_pass", "memory_optimize_pass", "ir_graph_to_program_pass"});
   predictor_.argument_.SetQuantVarScales(scales_);
 }
 
 bool AnalysisPredictor::Quantizer::RunQuantizePasses() {
-  // Argument argument;
+  predictor_.executor_->CreateVariables(*predictor_.inference_program_, 0, true,
+                                        predictor_.sub_scope_);
   PrepareArgument();
   auto& arg = predictor_.argument_;
   Analyzer().Run(&arg);
@@ -354,10 +350,12 @@ bool AnalysisPredictor::Quantizer::RunQuantizePasses() {
   predictor_.inference_program_.reset(
       new framework::ProgramDesc(arg.ir_analyzed_program()));
   LOG(INFO) << "== optimize 2 end ==";
+  predictor_.executor_->CreateVariables(*predictor_.inference_program_, 0,
+                                        false, predictor_.sub_scope_);
   return true;
 }
 
-bool AnalysisPredictor::Quantizer::SaveModel() {
+bool AnalysisPredictor::Quantizer::SaveModel() const {
   // TODO(wojtuss): Add saving model
   return true;
 }
