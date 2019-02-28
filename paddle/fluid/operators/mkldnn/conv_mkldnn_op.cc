@@ -69,7 +69,7 @@ inline mkldnn::memory::format GetWeightsFormat(mkldnn::memory::format format,
   }
 }
 
-template <typename T, typename K, typename B = K>
+template <typename T, typename K>
 class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
  public:
   void Compute(const paddle::framework::ExecutionContext& ctx) const override {
@@ -532,11 +532,11 @@ class ConvMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       // create convolution op primitive
       auto scale_bias_key = key + "@scale_bias";
       if (bias) {
-        const B* bias_data = bias->data<B>();
+        const K* bias_data = bias->data<K>();
         auto user_bias_md = platform::MKLDNNMemDesc(
-            {bias_tz}, platform::MKLDNNGetDataType<B>(), memory::format::x);
+            {bias_tz}, platform::MKLDNNGetDataType<K>(), memory::format::x);
         auto user_bias_memory_p = handler->AcquireBiasMemory(
-            user_bias_md, to_void_cast<B>(bias_data));
+            user_bias_md, to_void_cast<K>(bias_data));
         std::shared_ptr<mkldnn::memory> bias_memory_p;
         int mask_reorder = is_multi_channel ? 1 << 0 : 1;
         int count =
@@ -992,18 +992,10 @@ REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(conv2d, MKLDNN,
                                     ops::kConvMKLDNNINT8,
                                     ops::ConvMKLDNNOpKernel<uint8_t, float>);
 
-REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(
-    conv2d, MKLDNN, ::paddle::platform::CPUPlace, U8S32, ops::kConvMKLDNNINT8,
-    ops::ConvMKLDNNOpKernel<uint8_t, int8_t, int32_t>);
-
 REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(conv2d, MKLDNN,
                                     ::paddle::platform::CPUPlace, S8,
                                     ops::kConvMKLDNNINT8,
                                     ops::ConvMKLDNNOpKernel<int8_t, float>);
-
-REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(
-    conv2d, MKLDNN, ::paddle::platform::CPUPlace, S8S32, ops::kConvMKLDNNINT8,
-    ops::ConvMKLDNNOpKernel<int8_t, int8_t, int32_t>);
 
 REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(conv2d_grad, MKLDNN,
                                     ::paddle::platform::CPUPlace, FP32,

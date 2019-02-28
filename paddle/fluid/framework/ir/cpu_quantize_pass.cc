@@ -135,7 +135,7 @@ void CPUQuantizePass::QuantizeWeights(
   GET_IR_NODE_FROM_SUBGRAPH(conv_filter, conv_filter, conv_pattern);
   // Create and initialize weights variable
   VarDesc weights_desc(patterns::PDNodeName(prefix + "q_conv", "weights"));
-  weights_desc.SetDataType(proto::VarType::INT8);
+  weights_desc.SetDataType(proto::VarType::FP32);
   weights_desc.SetShape(conv_filter->Var()->GetShape());
   weights_desc.SetPersistable(true);
   auto* weights_node = g->CreateVarNode(&weights_desc);
@@ -145,7 +145,7 @@ void CPUQuantizePass::QuantizeWeights(
       param_scope()->Var(conv_filter->Name())->Get<LoDTensor>();
   weights_tensor->Resize(conv_filter_tensor.dims());
   float scale = conv_filter_scales.second.data<float>()[0];
-  QuantizeLoDTensor<float, int8_t>(conv_filter_tensor, weights_tensor, scale);
+  QuantizeLoDTensor<float, float>(conv_filter_tensor, weights_tensor, scale);
 
   // update conv's inputs
   conv_op->Op()->SetInput("Filter",
@@ -165,7 +165,7 @@ void CPUQuantizePass::QuantizeBias(
   GET_IR_NODE_FROM_SUBGRAPH(conv_bias, conv_bias, conv_pattern);
   // Create and initialize bias variable
   VarDesc bias_desc(patterns::PDNodeName(prefix + "q_conv", "bias"));
-  bias_desc.SetDataType(proto::VarType::INT32);
+  bias_desc.SetDataType(proto::VarType::FP32);
   bias_desc.SetShape(conv_bias->Var()->GetShape());
   bias_desc.SetPersistable(true);
   auto* bias_node = g->CreateVarNode(&bias_desc);
