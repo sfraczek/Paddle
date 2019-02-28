@@ -325,7 +325,8 @@ void AnalysisPredictor::Quantizer::PrepareArgument() const {
   auto passes = builder->AllPasses();
   predictor_.argument_.SetIrAnalysisPasses(passes);
   predictor_.argument_.SetAnalysisPasses(
-      {"ir_analysis_pass", "memory_optimize_pass", "ir_graph_to_program_pass"});
+      {"ir_analysis_pass", "memory_optimize_pass",
+       "ir_params_sync_among_devices_pass", "ir_graph_to_program_pass"});
   predictor_.argument_.SetQuantVarScales(scales_);
 }
 
@@ -354,6 +355,8 @@ bool AnalysisPredictor::Quantizer::SaveModel() const {
 bool AnalysisPredictor::Quantizer::Quantize() {
   if (!RunWarmup()) return false;
   if (!CalculateScales()) return false;
+  predictor_.PrepareScope(predictor_.scope_);
+  predictor_.CreateExecutor();
   // run quantization and optimization passes
   if (!RunQuantizePasses()) return false;
   predictor_.PrepareExecutor();

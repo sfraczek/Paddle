@@ -443,14 +443,18 @@ std::unique_ptr<PaddlePredictor> CreatePaddlePredictor<
   }
 
   if (config.quantizer_enabled()) {
-    // initialize quantizer
-    predictor_p->quantizer().reset(new AnalysisPredictor::Quantizer(
-        *predictor_p, config.quantizer_config()));
-    // do the quantization
-    if (!predictor_p->quantizer()->Quantize()) return nullptr;
+    if (!predictor_p->Quantize()) {
+      return nullptr;
+    }
   }
 
   return predictor;
+}
+
+bool AnalysisPredictor::Quantize() {
+  quantizer_.reset(
+      new AnalysisPredictor::Quantizer(*this, config_.quantizer_config()));
+  return quantizer_->Quantize();
 }
 
 void AnalysisPredictor::PrepareFeedFetch() {

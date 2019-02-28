@@ -85,9 +85,7 @@ class AnalysisPredictor : public PaddlePredictor {
 
   std::string GetSerializedProgram() const override;
 
-  // Helper class to perform quantization
-  class Quantizer;
-  std::unique_ptr<Quantizer> &quantizer() { return quantizer_; }
+  bool Quantize();
 
  protected:
   // For memory optimization.
@@ -133,6 +131,10 @@ class AnalysisPredictor : public PaddlePredictor {
   FRIEND_TEST(AnalysisPredictor, analysis_on);
   FRIEND_TEST(AnalysisPredictor, with_gpu);
 #endif
+
+ private:
+  // Helper class to perform quantization
+  class Quantizer;
 
  private:
   AnalysisConfig config_;

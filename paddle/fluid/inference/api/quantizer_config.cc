@@ -21,6 +21,7 @@ QuantizerConfig::QuantizerConfig() {
   rules_["conv2d"]["Filter"] = ScaleAlgo::MAX;
   // do not calculate scale for biases
   rules_["conv2d"]["Bias"] = ScaleAlgo::NONE;
+  rules_["conv2d"]["Output"] = ScaleAlgo::NONE;
 
   rules_["pool2d"]["X"] = ScaleAlgo::MAX;
 }

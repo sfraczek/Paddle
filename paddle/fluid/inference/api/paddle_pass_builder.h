@@ -107,8 +107,10 @@ class CpuPassStrategy : public PassStrategy {
  public:
   CpuPassStrategy();
 
-  explicit CpuPassStrategy(const CpuPassStrategy &other)
-      : PassStrategy(other.AllPasses()) {}
+  // TODO(sfraczek): remove this copy constructor because it is doing incomplete
+  // copy
+  // explicit CpuPassStrategy(const CpuPassStrategy &other)
+  //     : PassStrategy(other.AllPasses()) {}
 
   virtual ~CpuPassStrategy() = default;
 

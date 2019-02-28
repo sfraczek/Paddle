@@ -15,6 +15,7 @@ limitations under the License. */
 #pragma once
 #include <mkldnn.h>
 #include <string>
+#include <vector>
 
 namespace paddle {
 namespace platform {

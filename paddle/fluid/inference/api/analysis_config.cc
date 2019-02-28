@@ -239,7 +239,8 @@ void AnalysisConfig::Update() {
     pass_builder_->EnableQuantizer();
   }
 
-  if (enable_memory_optim_) {
+  // Do not optimize before quantization
+  if (enable_memory_optim_ && !use_quantizer_) {
     pass_builder()->AppendAnalysisPass("memory_optimize_pass");
   }
 

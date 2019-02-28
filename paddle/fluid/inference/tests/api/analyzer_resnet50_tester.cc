@@ -44,8 +44,7 @@ void profile(bool use_mkldnn = false) {
 
   std::vector<std::vector<PaddleTensor>> input_slots_all;
   SetInput(&input_slots_all);
-  TestPrediction(reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
-                 input_slots_all, &outputs, FLAGS_num_threads);
+  TestPrediction(&cfg, input_slots_all, &outputs, FLAGS_num_threads);
 }
 
 TEST(Analyzer_resnet50, profile) { profile(); }
@@ -74,8 +73,7 @@ void compare(bool use_mkldnn = false) {
 
   std::vector<std::vector<PaddleTensor>> input_slots_all;
   SetInput(&input_slots_all);
-  CompareNativeAndAnalysis(
-      reinterpret_cast<const PaddlePredictor::Config *>(&cfg), input_slots_all);
+  CompareNativeAndAnalysis(&cfg, input_slots_all);
 }
 
 TEST(Analyzer_resnet50, compare) { compare(); }
@@ -90,8 +88,26 @@ TEST(Analyzer_resnet50, compare_determine) {
 
   std::vector<std::vector<PaddleTensor>> input_slots_all;
   SetInput(&input_slots_all);
-  CompareDeterministic(reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
-                       input_slots_all);
+  CompareDeterministic(&cfg, input_slots_all);
+}
+
+TEST(Analyzer_resnet50, quantization) {
+  std::vector<std::vector<PaddleTensor>> input_slots_all;
+  SetInput(&input_slots_all);
+  auto warmup_data =
+      std::make_shared<std::vector<PaddleTensor>>(input_slots_all[0]);
+  // std::vector<PaddleTensor>(input_slots_all[0]));
+
+  AnalysisConfig cfg;
+  SetConfig(static_cast<AnalysisConfig *>(&cfg));
+  cfg.EnableMKLDNN();
+  cfg.EnableQuantizer();
+  cfg.quantizer_config()->SetWarmupData(warmup_data);
+  cfg.quantizer_config()->SetWarmupBatchSize(
+      warmup_data->front().shape.front());
+  cfg.quantizer_config()->SetEnabledOpTypes({"conv2d", "pool2d"});
+
+  CompareNativeAndAnalysis(&cfg, input_slots_all);
 }
 
 TEST(Analyzer_resnet50, quantization) {

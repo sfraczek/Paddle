@@ -34,6 +34,7 @@ class AnalysisPredictor;
 // NOTE WIP, not stable yet.
 struct AnalysisConfig {
   AnalysisConfig() = default;
+  virtual ~AnalysisConfig() = default;
   explicit AnalysisConfig(const AnalysisConfig& other);
   explicit AnalysisConfig(const std::string& model_dir);
   explicit AnalysisConfig(const std::string& prog_file,
@@ -213,9 +214,9 @@ struct AnalysisConfig {
 
  protected:
   // Update the config.
-  void Update();
+  virtual void Update();
 
-  std::string SerializeInfoCache();
+  virtual std::string SerializeInfoCache();
 
  protected:
   // Model pathes.

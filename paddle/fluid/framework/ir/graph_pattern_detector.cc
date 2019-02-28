@@ -1059,7 +1059,7 @@ PDNode *patterns::ConvBias::operator()(
   return eltwise_out_var;
 }
 
-PDNode *patterns::Conv::operator()() {
+PDNode *patterns::Conv::operator()(bool with_bias, bool with_res_conn) {
   auto conv_op = pattern->NewNode(conv_op_repr())->assert_is_op("conv2d");
 
   auto input_var = pattern->NewNode(conv_input_repr())
@@ -1074,9 +1074,22 @@ PDNode *patterns::Conv::operator()() {
                         ->AsOutput()
                         ->assert_is_op_output("conv2d", "Output");
 
-  conv_op->LinksFrom({input_var, filter_var});
-  conv_op->LinksTo({output_var});
+  std::vector<PDNode *> links_from{input_var, filter_var};
+  if (with_bias) {
+    auto bias_var = pattern->NewNode(conv_bias_repr())
+                        ->AsInput()
+                        ->assert_is_op_input("conv2d", "Bias");
+    links_from.push_back(bias_var);
+  }
 
+  if (with_res_conn) {
+    auto res_conn_var = pattern->NewNode(conv_residual_data_repr())
+                            ->AsInput()
+                            ->assert_is_op_input("conv2d", "ResidualData");
+    links_from.push_back(res_conn_var);
+  }
+
+  conv_op->LinksFrom(links_from).LinksTo({output_var});
   return output_var;
 }
 
