@@ -38,11 +38,11 @@ class CPUQuantizePass : public FusePassBase {
 
   void QuantizeConv(Graph* graph, bool with_bias = false,
                     bool with_res_conn = false) const;
-  void QuantizeInputOutput(
-      const GraphPatternDetector::subgraph_t& subgraph, Graph* g,
-      patterns::Conv conv_pattern, Node* conv_op, std::string prefix,
-      std::pair<QuantMax, LoDTensor> conv_input_scales,
-      std::pair<QuantMax, LoDTensor> conv_output_scales) const;
+  void QuantizeInputOutput(const GraphPatternDetector::subgraph_t& subgraph,
+                           Graph* g, patterns::Conv conv_pattern, Node* conv_op,
+                           std::string prefix,
+                           std::pair<QuantMax, LoDTensor> conv_input_scales,
+                           float output_scale) const;
   void QuantizeResidualConn(const GraphPatternDetector::subgraph_t& subgraph,
                             Graph* g, patterns::Conv conv_pattern,
                             Node* conv_op, std::string prefix,

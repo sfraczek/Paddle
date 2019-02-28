@@ -61,7 +61,7 @@ void CPUQuantizePass::QuantizeInputOutput(
     const GraphPatternDetector::subgraph_t& subgraph, Graph* g,
     patterns::Conv conv_pattern, Node* conv_op, std::string prefix,
     std::pair<QuantMax, LoDTensor> conv_input_scales,
-    std::pair<QuantMax, LoDTensor> conv_output_scales) const {
+    float output_scale) const {
   GET_IR_NODE_FROM_SUBGRAPH(conv_input, conv_input, conv_pattern);
   GET_IR_NODE_FROM_SUBGRAPH(conv_output, conv_output, conv_pattern);
   // Create and initialize quantize output variable
@@ -106,7 +106,7 @@ void CPUQuantizePass::QuantizeInputOutput(
   deq_desc.SetInput("Input",
                     std::vector<std::string>({dequantize_in_node->Name()}));
   deq_desc.SetOutput("Output", std::vector<std::string>({conv_output->Name()}));
-  deq_desc.SetAttr("Scale", conv_output_scales.second.data<float>()[0]);
+  deq_desc.SetAttr("Scale", output_scale);
   auto dequantize_op = g->CreateOpNode(&deq_desc);  // OpDesc will be copied.
 
   // update conv's inputs and outputs
@@ -176,7 +176,7 @@ void CPUQuantizePass::QuantizeBias(
   bias_tensor->Resize(conv_bias_tensor.dims());
   float scale = conv_filter_scales.second.data<float>()[0] *
                 conv_input_scales.second.data<float>()[0];
-  QuantizeLoDTensor<float, int32_t>(conv_bias_tensor, bias_tensor, scale);
+  QuantizeLoDTensor<float, float>(conv_bias_tensor, bias_tensor, scale);
 
   // update conv's inputs
   conv_op->Op()->SetInput("Bias",
@@ -259,13 +259,13 @@ void CPUQuantizePass::QuantizeConv(Graph* graph, bool with_bias,
     auto scales = Get<VarQuantMaxAndScale>("quant_var_scales");
     GET_IR_NODE_FROM_SUBGRAPH(conv_filter, conv_filter, conv_pattern2);
     GET_IR_NODE_FROM_SUBGRAPH(conv_input, conv_input, conv_pattern2);
-    GET_IR_NODE_FROM_SUBGRAPH(conv_output, conv_output, conv_pattern2);
     auto conv_filter_scales = scales[conv_filter->Name()];
-    auto conv_output_scales = scales[conv_output->Name()];
     auto conv_input_scales = scales[conv_input->Name()];
+    auto output_scale = conv_input_scales.second.data<float>()[0] *
+                        conv_filter_scales.second.data<float>()[0];
     // create a quantize op node for input.
     QuantizeInputOutput(subgraph, g, conv_pattern2, conv_op, prefix,
-                        conv_input_scales, conv_output_scales);
+                        conv_input_scales, output_scale);
 
     QuantizeWeights(subgraph, g, conv_pattern2, conv_op, prefix,
                     conv_filter_scales);
