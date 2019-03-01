@@ -183,11 +183,7 @@ class AnalysisPredictor::Quantizer {
   bool Quantize();
 
 #if PADDLE_WITH_TESTING
-  FRIEND_TEST(Quantizer, expand_quantized_bins);
-  FRIEND_TEST(Quantizer, histogram);
-  FRIEND_TEST(Quantizer, kl_scaling_factor);
-  FRIEND_TEST(Quantizer, max_scaling_factor);
-  FRIEND_TEST(Quantizer, safe_entropy);
+  friend class QuantizerTest;
 #endif
 
  private:
@@ -217,7 +213,7 @@ class AnalysisPredictor::Quantizer {
   // Returns histogram and bin width
   std::pair<std::vector<int>, float> Histogram(
       const framework::LoDTensor *var_tensor, float min_val, float max_val,
-      int num_bins = 2048) const;
+      size_t num_bins = 2048) const;
 
   // Calculate the entropy.
   float SafeEntropy(std::vector<int> reference_distr_P, int P_sum,
