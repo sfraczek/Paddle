@@ -45,14 +45,12 @@ class CPUQuantizePass : public FusePassBase {
 
   void QuantizePool(Graph* graph) const;
 
-  template <typename OutT>
   void QuantizeInput(Graph* g, Node* op, Node* input, std::string input_name,
                      std::string prefix, float scale, bool is_negative) const;
 
-  template <typename InT>
   void DequantizeOutput(Graph* g, Node* op, Node* output,
                         std::string output_name, std::string prefix,
-                        float scale) const;
+                        float scale, bool is_negative) const;
 
   const std::string name_scope_{"quantize"};
 };

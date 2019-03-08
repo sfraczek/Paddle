@@ -33,13 +33,13 @@ void UnlinkNodes(ir::Node* a, ir::Node* b) {
 
 }  // namespace
 
-template <typename OutT>
 void CPUQuantizePass::QuantizeInput(Graph* g, Node* op, Node* input,
                                     std::string input_name, std::string prefix,
                                     float scale, bool is_negative) const {
   // Create quantize output variable
   VarDesc quantize_out_desc(patterns::PDNodeName(prefix + "quantize", "out"));
-  quantize_out_desc.SetDataType(framework::ToDataType(typeid(OutT)));
+  quantize_out_desc.SetDataType(is_negative ? proto::VarType::INT8
+                                            : proto::VarType::UINT8);
   quantize_out_desc.SetShape(input->Var()->GetShape());
   auto* quantize_out_node = g->CreateVarNode(&quantize_out_desc);
 
@@ -64,13 +64,14 @@ void CPUQuantizePass::QuantizeInput(Graph* g, Node* op, Node* input,
   IR_NODE_LINK_TO(quantize_out_node, op);
 }
 
-template <typename InT>
 void CPUQuantizePass::DequantizeOutput(Graph* g, Node* op, Node* output,
                                        std::string output_name,
-                                       std::string prefix, float scale) const {
+                                       std::string prefix, float scale,
+                                       bool is_negative) const {
   // Create dequantize input variable
   VarDesc dequantize_in_desc(patterns::PDNodeName(prefix + "dequantize", "in"));
-  dequantize_in_desc.SetDataType(framework::ToDataType(typeid(InT)));
+  dequantize_in_desc.SetDataType(is_negative ? proto::VarType::INT8
+                                             : proto::VarType::UINT8);
   dequantize_in_desc.SetShape(output->Var()->GetShape());
   auto* dequantize_in_node = g->CreateVarNode(&dequantize_in_desc);
 
@@ -138,8 +139,8 @@ void CPUQuantizePass::QuantizeConv(Graph* graph,
     auto conv_output_scale =
         scales[conv_output->Name()].second.data<float>()[0];
 
-    QuantizeInput<int8_t>(g, conv_op, conv_input, "Input", prefix,
-                          conv_input_scale, is_input_negative);
+    QuantizeInput(g, conv_op, conv_input, "Input", prefix, conv_input_scale,
+                  is_input_negative);
     conv_op->Op()->SetAttr("Scale_in", conv_input_scale);
     conv_op->Op()->SetAttr("Scale_weights", conv_filter_scale);
 
@@ -149,13 +150,15 @@ void CPUQuantizePass::QuantizeConv(Graph* graph,
       auto conv_res_conn_scale =
           scales[conv_residual_data->Name()].second.data<float>()[0];
 
-      QuantizeInput<int8_t>(g, conv_op, conv_residual_data, "ResidualData",
-                            prefix, conv_res_conn_scale, true);
+      QuantizeInput(g, conv_op, conv_residual_data, "ResidualData", prefix,
+                    conv_res_conn_scale, true);
       conv_op->Op()->SetAttr("Scale_in_eltwise", conv_res_conn_scale);
     }
 
-    DequantizeOutput<int8_t>(g, conv_op, conv_output, "Output", prefix,
-                             conv_output_scale);
+    bool is_output_negative =
+        scales[conv_output->Name()].first == QuantMax::S8_MAX;
+    DequantizeOutput(g, conv_op, conv_output, "Output", prefix,
+                     conv_output_scale, is_output_negative);
     conv_op->Op()->SetAttr("Scale_out", conv_output_scale);
 
     ++quantize_conv_count;
@@ -202,10 +205,10 @@ void CPUQuantizePass::QuantizePool(Graph* graph) const {
         scales[pool_input->Name()].first == QuantMax::S8_MAX;
 
     std::string prefix{"q_pool"};
-    QuantizeInput<int8_t>(g, pool_op, pool_input, "X", prefix, input_scale,
-                          is_input_negative);
-    DequantizeOutput<int8_t>(g, pool_op, pool_output, "Out", prefix,
-                             input_scale);
+    QuantizeInput(g, pool_op, pool_input, "X", prefix, input_scale,
+                  is_input_negative);
+    DequantizeOutput(g, pool_op, pool_output, "Out", prefix, input_scale,
+                     is_input_negative);
 
     ++quantize_pool_count;
   };
