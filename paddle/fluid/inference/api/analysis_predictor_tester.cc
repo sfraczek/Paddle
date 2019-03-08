@@ -265,18 +265,18 @@ class QuantizerTest : public testing::Test {
   }
 
   std::pair<QuantMax, framework::LoDTensor> GetMaxScalingFactor(
-      const framework::LoDTensor& var_tensor) const {
-    return quantizer->GetMaxScalingFactor(var_tensor);
+      const framework::LoDTensor& var_tensor, QuantMax qmax) const {
+    return quantizer->GetMaxScalingFactor(var_tensor, qmax);
   }
 
   std::pair<QuantMax, framework::LoDTensor> GetMaxChScalingFactor(
-      const framework::LoDTensor& var_tensor) const {
-    return quantizer->GetMaxChScalingFactor(var_tensor);
+      const framework::LoDTensor& var_tensor, QuantMax qmax) const {
+    return quantizer->GetMaxChScalingFactor(var_tensor, qmax);
   }
 
   std::pair<QuantMax, framework::LoDTensor> GetKLScalingFactor(
-      const framework::LoDTensor& var_tensor) const {
-    return quantizer->GetKLScalingFactor(var_tensor);
+      const framework::LoDTensor& var_tensor, QuantMax qmax) const {
+    return quantizer->GetKLScalingFactor(var_tensor, qmax);
   }
 
  protected:
@@ -387,7 +387,8 @@ TEST_F(QuantizerTest, kl_scaling_factor_signed) {
   QuantMax quant_max;
   framework::LoDTensor lod_tensor;
 
-  std::tie(quant_max, lod_tensor) = GetKLScalingFactor(var_tensor);
+  std::tie(quant_max, lod_tensor) =
+      GetKLScalingFactor(var_tensor, QuantMax::S8_MAX);
 
   ASSERT_EQ(quant_max, QuantMax::S8_MAX);
   ASSERT_EQ(lod_tensor.numel(), 1);
@@ -407,7 +408,8 @@ TEST_F(QuantizerTest, max_scaling_factor_signed) {
   QuantMax quant_max;
   framework::LoDTensor lod_tensor;
 
-  std::tie(quant_max, lod_tensor) = GetMaxScalingFactor(var_tensor);
+  std::tie(quant_max, lod_tensor) =
+      GetMaxScalingFactor(var_tensor, QuantMax::S8_MAX);
 
   ASSERT_EQ(quant_max, QuantMax::S8_MAX);
   ASSERT_EQ(lod_tensor.numel(), 1);
@@ -427,7 +429,8 @@ TEST_F(QuantizerTest, max_scaling_factor_unsigned) {
   QuantMax quant_max;
   framework::LoDTensor lod_tensor;
 
-  std::tie(quant_max, lod_tensor) = GetMaxScalingFactor(var_tensor);
+  std::tie(quant_max, lod_tensor) =
+      GetMaxScalingFactor(var_tensor, QuantMax::U8_MAX);
 
   ASSERT_EQ(quant_max, QuantMax::U8_MAX);
   ASSERT_EQ(lod_tensor.numel(), 1);
@@ -435,7 +438,7 @@ TEST_F(QuantizerTest, max_scaling_factor_unsigned) {
               static_cast<float>(QuantMax::U8_MAX) / max_val, abs_error);
 }
 
-TEST_F(QuantizerTest, max_scaling_factor_chwise) {
+TEST_F(QuantizerTest, max_scaling_factor_chwise_unsigned) {
   const std::array<float, 5>& values = non_negative_values;
   float max_val = *std::max_element(values.begin(), values.end());
   int channels = 3;
@@ -450,7 +453,8 @@ TEST_F(QuantizerTest, max_scaling_factor_chwise) {
   QuantMax quant_max;
   framework::LoDTensor lod_tensor;
 
-  std::tie(quant_max, lod_tensor) = GetMaxChScalingFactor(var_tensor);
+  std::tie(quant_max, lod_tensor) =
+      GetMaxChScalingFactor(var_tensor, QuantMax::U8_MAX);
 
   ASSERT_EQ(quant_max, QuantMax::U8_MAX);
   ASSERT_EQ(lod_tensor.numel(), channels);
@@ -471,7 +475,8 @@ TEST_F(QuantizerTest, kl_scaling_factor_unsigned) {
   QuantMax quant_max;
   framework::LoDTensor lod_tensor;
 
-  std::tie(quant_max, lod_tensor) = GetKLScalingFactor(var_tensor);
+  std::tie(quant_max, lod_tensor) =
+      GetKLScalingFactor(var_tensor, QuantMax::U8_MAX);
 
   ASSERT_EQ(quant_max, QuantMax::U8_MAX);
   ASSERT_EQ(lod_tensor.numel(), 1);
