@@ -68,7 +68,8 @@ bool AnalysisPredictor::MkldnnQuantizer::CalculateScales() {
             // output of conv2d with relu must be unsigned
             is_unsigned = op->HasAttr("fuse_relu") &&
                           boost::get<bool>(op->GetAttr("fuse_relu"));
-          } else if (is_output && op->Type() == "pool2d") {
+          } else if (is_output &&
+                     (op->Type() == "pool2d" || op->Type() == "transpose2")) {
             // output of pool2d with unsigned input must be unsigned
             auto input_var_name = op->Input("X")[0];
             if (scales_.find(input_var_name) != scales_.end()) {
@@ -99,8 +100,8 @@ void AnalysisPredictor::MkldnnQuantizer::CalculateSingleScale(
 
   PADDLE_ENFORCE(
       var_tensor.numel() > 0,
-      "MkldnnQuantizer: LoDTensor of variable %s for quantization of op "
-      "%s of connection %s should not be empty.",
+      "MkldnnQuantizer: LoDTensor of variable %s for quantization of op %s of "
+      "connection %s should not be empty.",
       var_name, op_type_name, conn_name);
 
   switch (rule) {
