@@ -212,6 +212,7 @@ class ConcatMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
 
     output->set_layout(DataLayout::kMKLDNN);
     output->set_format(GetDstMemFormat(*concat_pd));
+    // output->set_mkldnn_prim_desc(concat_pd->dst_primitive_desc());
   }
 };
 }  // namespace operators
