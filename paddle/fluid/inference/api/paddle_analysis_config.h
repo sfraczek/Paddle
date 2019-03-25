@@ -25,6 +25,9 @@
 // the abstract path of this header file will be changed.
 #include "paddle_api.h"           // NOLINT
 #include "paddle_pass_builder.h"  // NOLINT
+#ifdef PADDLE_WITH_MKLDNN
+#include "paddle_quantizer_config.h"  // NOLINT
+#endif
 
 namespace paddle {
 
@@ -174,6 +177,18 @@ struct AnalysisConfig {
     mkldnn_enabled_op_types_ = op_list;
   }
 
+  /** Turn on quantization.
+   */
+  void EnableQuantizer();
+
+  /** A boolean state telling whether the quantization is enabled.
+  */
+  bool quantizer_enabled() const { return use_quantizer_; }
+
+#ifdef PADDLE_WITH_MKLDNN
+  std::shared_ptr<QuantizerConfig> quantizer_config() const;
+#endif
+
   /** Specify the memory buffer of program and parameter
    * @param prog_buffer the memory buffer of program.
    * @param prog_buffer_size the size of the data.
@@ -243,6 +258,11 @@ struct AnalysisConfig {
 
   bool use_mkldnn_{false};
   std::unordered_set<std::string> mkldnn_enabled_op_types_;
+
+  bool use_quantizer_{false};
+#ifdef PADDLE_WITH_MKLDNN
+  std::shared_ptr<QuantizerConfig> quantizer_config_;
+#endif
 
   bool model_from_memory_{false};
 
