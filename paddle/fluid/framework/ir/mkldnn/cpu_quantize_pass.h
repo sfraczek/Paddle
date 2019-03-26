@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 #include "paddle/fluid/framework/ir/fuse_pass_base.h"
 #include "paddle/fluid/framework/ir/graph.h"
 #include "paddle/fluid/framework/ir/graph_pattern_detector.h"
@@ -50,9 +51,15 @@ class CPUQuantizePass : public FusePassBase {
 
   void QuantizeTranspose2(Graph* graph) const;
 
+  void QuantizeConcat(Graph* graph) const;
+
   void QuantizeInput(Graph* g, Node* op, Node* input, std::string input_name,
                      double scale_to_one, bool is_unsigned,
                      std::string scale_attr_name = "") const;
+
+  void QuantizeInputs(Graph* g, Node* op, std::vector<Node*> input,
+                      std::string input_name, const VarQuantScale& scales,
+                      bool is_unsigned, std::string scale_attr_name = "") const;
 
   void DequantizeOutput(Graph* g, Node* op, Node* output,
                         std::string output_name, double scale_to_one,
