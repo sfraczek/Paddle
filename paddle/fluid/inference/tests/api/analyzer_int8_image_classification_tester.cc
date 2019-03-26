@@ -14,6 +14,7 @@ limitations under the License. */
 
 #include <fstream>
 #include <iostream>
+#include "paddle/fluid/inference/api/paddle_analysis_config.h"
 #include "paddle/fluid/inference/tests/api/tester_helper.h"
 
 namespace paddle {
@@ -32,36 +33,61 @@ void SetConfig(AnalysisConfig *cfg) {
 }
 
 template <typename T>
-PaddleTensor LoadTensorFromStream(std::ifstream &file, std::vector<int> shape,
-                                  std::string name) {
-  PaddleTensor tensor;
-  tensor.name = name;
-  tensor.shape = std::move(shape);
-  tensor.dtype = GetPaddleDType<T>();
-  size_t numel = std::accumulate(begin(tensor.shape), end(tensor.shape), 1,
-                                 std::multiplies<T>());
-  tensor.data.Resize(numel * sizeof(T));
+class TensorReader {
+ public:
+  TensorReader(std::ifstream &file, size_t beginning_offset,
+               std::vector<int> shape, std::string name)
+      : file_(file), position(beginning_offset), shape_(shape), name_(name) {
+    numel =
+        std::accumulate(shape_.begin(), shape_.end(), 1, std::multiplies<T>());
+  }
 
-  std::copy_n(std::istream_iterator<T>(file), numel,
-              static_cast<T *>(tensor.data.data()));
+  PaddleTensor NextBatch() {
+    PaddleTensor tensor;
+    tensor.name = name_;
+    tensor.shape = shape_;
+    tensor.dtype = GetPaddleDType<T>();
+    tensor.data.Resize(numel * sizeof(T));
 
-  return tensor;
-}
+    file_.seekg(position);
+    file_.read(static_cast<char *>(tensor.data.data()), numel * sizeof(T));
+    position = file_.tellg();
+    return tensor;
+  }
+
+ protected:
+  std::ifstream &file_;
+  size_t position;
+  std::vector<int> shape_;
+  std::string name_;
+  size_t numel;
+};
 
 void SetInput(std::vector<std::vector<PaddleTensor>> *inputs) {
   PADDLE_ENFORCE_EQ(FLAGS_test_all_data, 0, "Only have single batch of data.");
   std::string line;
-  std::ifstream file(FLAGS_infer_data);
+  std::ifstream file(FLAGS_infer_data, std::ios::binary);
 
-  int batch_size = 100;
-  PaddleTensor input =
-      LoadTensorFromStream<float>(file, {batch_size, 3, 224, 224}, "input");
+  int64_t total_images;
+  file.read(reinterpret_cast<char *>(&total_images), sizeof(total_images));
 
-  PaddleTensor labels =
-      LoadTensorFromStream<int64_t>(file, {batch_size, 1}, "label");
+  std::vector<int> image_batch_shape{FLAGS_batch_size, 3, 224, 224};
+  std::vector<int> label_batch_shape{FLAGS_batch_size, 1};
+  auto labels_offset_in_file =
+      sizeof(float) * total_images * std::accumulate(image_batch_shape.begin(),
+                                                     image_batch_shape.end(), 1,
+                                                     std::multiplies<int>());
 
-  std::vector<PaddleTensor> input_slots{{input, labels}};
-  inputs->emplace_back(input_slots);
+  TensorReader<float> image_reader(file, 0, image_batch_shape, "input");
+  TensorReader<int64_t> label_reader(file, labels_offset_in_file,
+                                     label_batch_shape, "label");
+
+  for (auto i = 0; i < total_images; i++) {
+    auto images = image_reader.NextBatch();
+    auto labels = label_reader.NextBatch();
+    inputs->emplace_back(
+        std::vector<PaddleTensor>{std::move(images), std::move(labels)});
+  }
 }
 
 TEST(Analyzer_int8_resnet50, quantization) {
