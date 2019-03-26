@@ -466,14 +466,15 @@ void CompareNativeAndAnalysis(
   CompareResult(analysis_outputs, native_outputs);
 }
 
-void CompareQuantizedNativeAndAnalysis(
+void CompareQuantizedAndAnalysis(
     const PaddlePredictor::Config *config,
+    const PaddlePredictor::Config *qconfig,
     const std::vector<std::vector<PaddleTensor>> &inputs) {
   PrintConfig(config, true);
-  std::vector<PaddleTensor> native_outputs, analysis_outputs;
-  TestOneThreadPrediction(config, inputs, &native_outputs, false);
+  std::vector<PaddleTensor> analysis_outputs, quantized_outputs;
   TestOneThreadPrediction(config, inputs, &analysis_outputs, true);
-  CompareTopAccuracy(analysis_outputs, native_outputs);
+  TestOneThreadPrediction(qconfig, inputs, &quantized_outputs, true);
+  CompareTopAccuracy(quantized_outputs, analysis_outputs);
 }
 
 void CompareNativeAndAnalysis(

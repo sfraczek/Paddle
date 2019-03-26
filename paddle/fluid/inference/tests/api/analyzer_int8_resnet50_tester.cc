@@ -36,8 +36,6 @@ void SetConfig(AnalysisConfig *cfg) {
        "conv_eltwiseadd_bn_fuse_pass", "conv_bias_mkldnn_fuse_pass",
        "conv_elementwise_add_mkldnn_fuse_pass", "conv_relu_mkldnn_fuse_pass",
        "fc_fuse_pass", "is_test_pass"});
-
-  cfg->EnableQuantizer();
 }
 
 template <typename T>
@@ -77,17 +75,23 @@ TEST(Analyzer_int8_resnet50, quantization) {
   AnalysisConfig cfg;
   SetConfig(&cfg);
 
+  AnalysisConfig q_cfg;
+  SetConfig(&q_cfg);
+
   std::vector<std::vector<PaddleTensor>> input_slots_all;
   SetInput(&input_slots_all);
   auto warmup_data =
       std::make_shared<std::vector<PaddleTensor>>(input_slots_all[0]);
 
-  cfg.quantizer_config()->SetWarmupData(warmup_data);
-  cfg.quantizer_config()->SetWarmupBatchSize(
+  q_cfg.EnableQuantizer();
+  q_cfg.quantizer_config()->SetWarmupData(warmup_data);
+  q_cfg.quantizer_config()->SetWarmupBatchSize(
       warmup_data->front().shape.front());
 
-  CompareQuantizedNativeAndAnalysis(
-      reinterpret_cast<const PaddlePredictor::Config *>(&cfg), input_slots_all);
+  CompareQuantizedAndAnalysis(
+      reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
+      reinterpret_cast<const PaddlePredictor::Config *>(&q_cfg),
+      input_slots_all);
 }
 
 TEST(Analyzer_int8_resnet50, profile) {
@@ -99,6 +103,7 @@ TEST(Analyzer_int8_resnet50, profile) {
   auto warmup_data =
       std::make_shared<std::vector<PaddleTensor>>(input_slots_all_warmup[0]);
 
+  cfg.EnableQuantizer();
   cfg.quantizer_config()->SetWarmupData(warmup_data);
   cfg.quantizer_config()->SetWarmupBatchSize(
       warmup_data->front().shape.front());
