@@ -1173,6 +1173,17 @@ PDNode *patterns::Transpose2::operator()() {
   return output_var;
 }
 
+PDNode *patterns::Concat::operator()() {
+  auto concat_op = pattern->NewNode(concat_op_repr())->assert_is_op("concat");
+
+  auto output_var = pattern->NewNode(concat_out_repr())
+                        ->AsOutput()
+                        ->assert_is_op_output("concat", "Out");
+
+  concat_op->LinksTo({output_var});
+  return output_var;
+}
+
 std::unordered_set<std::string> conv_act_set({"identity", "relu"});
 
 PDNode *patterns::ConvElementwiseaddAct::operator()(PDNode *conv_in) {
