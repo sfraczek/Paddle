@@ -26,7 +26,7 @@ endfunction()
 function(inference_analysis_api_int8_test target model_dir data_dir filename)
     inference_analysis_test(${target} SRCS ${filename}
         EXTRA_DEPS ${INFERENCE_EXTRA_DEPS} benchmark
-        ARGS --infer_model=${model_dir}/model --infer_data=${data_dir}/data.txt)
+        ARGS --infer_model=${model_dir}/model --infer_data=${data_dir}/data.bin --batch_size=100)
 endfunction()
 
 function(inference_analysis_api_test_with_fake_data target install_dir filename model_name)
@@ -148,7 +148,7 @@ inference_analysis_api_test_with_fake_data(test_analyzer_mobilenet_depthwise_con
 if(WITH_MKLDNN)
   set(INT8_DATA_DIR "${INFERENCE_DEMO_INSTALL_DIR}/int8")
   if (NOT EXISTS ${INT8_DATA_DIR})
-    inference_download_and_uncompress(${INT8_DATA_DIR} "http://paddle-inference-dist.bj.bcebos.com/int8" "resnet50_int8v2_data.txt.tar.gz")
+    inference_download_and_uncompress(${INT8_DATA_DIR} "http://paddle-inference-dist.bj.bcebos.com/int8" "imagenet_val_100.bin.tar.gz")
   endif()
 
   #resnet50 int8

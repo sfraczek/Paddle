@@ -209,7 +209,6 @@ void SetFakeImageInput(std::vector<std::vector<PaddleTensor>> *inputs,
                        std::string model_filename = "model",
                        std::string params_filename = "params",
                        const std::vector<std::string> *feed_names = nullptr,
-                       const std::vector<PaddleDType> *feed_dtypes = nullptr,
                        const int continuous_inuput_index = 0) {
   // Set fake_image_data
   PADDLE_ENFORCE_EQ(FLAGS_test_all_data, 0, "Only have single batch of data.");
@@ -239,11 +238,7 @@ void SetFakeImageInput(std::vector<std::vector<PaddleTensor>> *inputs,
       input.name = (*feed_names)[i];
     }
     input.shape = shape;
-    if (feed_dtypes) {
-      input.dtype = (*feed_dtypes)[i];
-    } else {
-      input.dtype = PaddleDType::FLOAT32;
-    }
+    input.dtype = PaddleDType::FLOAT32;
     size_t len = std::accumulate(shape.begin(), shape.end(), 1,
                                  [](int a, int b) { return a * b; });
     input.data.Resize(len * sizeof(float));

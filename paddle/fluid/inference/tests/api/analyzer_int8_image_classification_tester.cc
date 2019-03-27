@@ -17,6 +17,8 @@ limitations under the License. */
 #include "paddle/fluid/inference/api/paddle_analysis_config.h"
 #include "paddle/fluid/inference/tests/api/tester_helper.h"
 
+DEFINE_int32(iterations, 0, "Number of iterations");
+
 namespace paddle {
 namespace inference {
 namespace analysis {
@@ -26,7 +28,7 @@ void SetConfig(AnalysisConfig *cfg) {
   cfg->SetProgFile("__model__");
   cfg->DisableGpu();
   cfg->SwitchIrOptim();
-  cfg->SwitchSpecifyInputNames();
+  cfg->SwitchSpecifyInputNames(false);
   cfg->SetCpuMathLibraryNumThreads(FLAGS_paddle_num_threads);
 
   cfg->EnableMKLDNN();
@@ -52,6 +54,12 @@ class TensorReader {
     file_.seekg(position);
     file_.read(static_cast<char *>(tensor.data.data()), numel * sizeof(T));
     position = file_.tellg();
+
+    LOG(INFO) << name_ << ": read " << file_.gcount() << " bytes";
+    if (file_.eof()) LOG(INFO) << name_ << ": reached end of stream";
+    if (file_.fail())
+      throw std::runtime_error(name_ + ": failed reading file.");
+
     return tensor;
   }
 
@@ -63,26 +71,70 @@ class TensorReader {
   size_t numel;
 };
 
-void SetInput(std::vector<std::vector<PaddleTensor>> *inputs) {
-  PADDLE_ENFORCE_EQ(FLAGS_test_all_data, 0, "Only have single batch of data.");
-  std::string line;
+std::shared_ptr<std::vector<PaddleTensor>> GetWarmupData(
+    const std::vector<std::vector<PaddleTensor>> &test_data, int num_images) {
+  int test_data_batch_size = test_data[0][0].shape[0];
+  CHECK_LE(static_cast<size_t>(num_images),
+           test_data.size() * test_data_batch_size);
+
+  PaddleTensor images;
+  images.name = "input";
+  images.shape = {num_images, 3, 224, 224};
+  images.dtype = PaddleDType::FLOAT32;
+  images.data.Resize(sizeof(float) * num_images * 3 * 224 * 224);
+
+  PaddleTensor labels;
+  labels.name = "labels";
+  labels.shape = {num_images, 1};
+  labels.dtype = PaddleDType::INT64;
+  labels.data.Resize(sizeof(int64_t) * num_images);
+
+  for (int i = 0; i < num_images; i++) {
+    auto batch = i / test_data_batch_size;
+    auto element_in_batch = i % test_data_batch_size;
+    std::copy_n(static_cast<float *>(test_data[batch][0].data.data()) +
+                    element_in_batch * 3 * 224 * 224,
+                3 * 224 * 224,
+                static_cast<float *>(images.data.data()) + i * 3 * 224 * 224);
+
+    std::copy_n(static_cast<int64_t *>(test_data[batch][1].data.data()) +
+                    element_in_batch,
+                1, static_cast<int64_t *>(labels.data.data()) + i);
+  }
+
+  auto warmup_data = std::make_shared<std::vector<PaddleTensor>>(2);
+  (*warmup_data)[0] = std::move(images);
+  (*warmup_data)[1] = std::move(labels);
+  return warmup_data;
+}
+
+void SetInput(std::vector<std::vector<PaddleTensor>> *inputs,
+              int32_t batch_size = FLAGS_batch_size) {
   std::ifstream file(FLAGS_infer_data, std::ios::binary);
+  if (!file) {
+    FAIL() << "Couldn't open file: " << FLAGS_infer_data;
+  }
 
-  int64_t total_images;
+  int64_t total_images{0};
   file.read(reinterpret_cast<char *>(&total_images), sizeof(total_images));
+  LOG(INFO) << "Total images in file: " << total_images;
 
-  std::vector<int> image_batch_shape{FLAGS_batch_size, 3, 224, 224};
-  std::vector<int> label_batch_shape{FLAGS_batch_size, 1};
+  std::vector<int> image_batch_shape{batch_size, 3, 224, 224};
+  std::vector<int> label_batch_shape{batch_size, 1};
   auto labels_offset_in_file =
-      sizeof(float) * total_images * std::accumulate(image_batch_shape.begin(),
-                                                     image_batch_shape.end(), 1,
-                                                     std::multiplies<int>());
+      static_cast<size_t>(file.tellg()) +
+      sizeof(float) * total_images *
+          std::accumulate(image_batch_shape.begin() + 1,
+                          image_batch_shape.end(), 1, std::multiplies<int>());
 
   TensorReader<float> image_reader(file, 0, image_batch_shape, "input");
   TensorReader<int64_t> label_reader(file, labels_offset_in_file,
                                      label_batch_shape, "label");
 
-  for (auto i = 0; i < total_images; i++) {
+  auto iterations = total_images / batch_size;
+  if (FLAGS_iterations > 0 && FLAGS_iterations < iterations)
+    iterations = FLAGS_iterations;
+  for (auto i = 0; i < iterations; i++) {
     auto images = image_reader.NextBatch();
     auto labels = label_reader.NextBatch();
     inputs->emplace_back(
@@ -98,14 +150,14 @@ TEST(Analyzer_int8_resnet50, quantization) {
   SetConfig(&q_cfg);
 
   std::vector<std::vector<PaddleTensor>> input_slots_all;
-  SetInput(&input_slots_all);
-  auto warmup_data =
-      std::make_shared<std::vector<PaddleTensor>>(input_slots_all[0]);
+  SetInput(&input_slots_all, 100);
+
+  std::shared_ptr<std::vector<PaddleTensor>> warmup_data =
+      GetWarmupData(input_slots_all, 100);
 
   q_cfg.EnableQuantizer();
   q_cfg.quantizer_config()->SetWarmupData(warmup_data);
-  q_cfg.quantizer_config()->SetWarmupBatchSize(
-      warmup_data->front().shape.front());
+  q_cfg.quantizer_config()->SetWarmupBatchSize(100);
 
   CompareQuantizedAndAnalysis(
       reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
@@ -117,26 +169,20 @@ TEST(Analyzer_int8_resnet50, profile) {
   AnalysisConfig cfg;
   SetConfig(&cfg);
 
-  std::vector<std::vector<PaddleTensor>> input_slots_all_warmup;
-  SetInput(&input_slots_all_warmup);
-  auto warmup_data =
-      std::make_shared<std::vector<PaddleTensor>>(input_slots_all_warmup[0]);
+  std::vector<std::vector<PaddleTensor>> input_slots_all;
+  SetInput(&input_slots_all);
+
+  std::shared_ptr<std::vector<PaddleTensor>> warmup_data =
+      GetWarmupData(input_slots_all, 100);
 
   cfg.EnableQuantizer();
   cfg.quantizer_config()->SetWarmupData(warmup_data);
-  cfg.quantizer_config()->SetWarmupBatchSize(
-      warmup_data->front().shape.front());
+  cfg.quantizer_config()->SetWarmupBatchSize(100);
 
   std::vector<PaddleTensor> outputs;
 
-  std::vector<std::vector<PaddleTensor>> input_slots_all_test;
-  std::vector<std::string> feed_names = {"input", "label"};
-  std::vector<PaddleDType> feed_dtypes = {PaddleDType::FLOAT32,
-                                          PaddleDType::INT64};
-  SetFakeImageInput(&input_slots_all_test, FLAGS_infer_model, false,
-                    "__model__", "", &feed_names, &feed_dtypes, 0);
   TestPrediction(reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
-                 input_slots_all_test, &outputs, FLAGS_num_threads);
+                 input_slots_all, &outputs, FLAGS_num_threads);
 }
 
 }  // namespace analysis
