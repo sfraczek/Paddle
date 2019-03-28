@@ -123,13 +123,12 @@ void SetInput(std::vector<std::vector<PaddleTensor>> *inputs,
 
   std::vector<int> image_batch_shape{batch_size, 3, 224, 224};
   std::vector<int> label_batch_shape{batch_size, 1};
+  auto images_offset_in_file = static_cast<size_t>(file.tellg());
   auto labels_offset_in_file =
-      static_cast<size_t>(file.tellg()) +
-      sizeof(float) * total_images *
-          std::accumulate(image_batch_shape.begin() + 1,
-                          image_batch_shape.end(), 1, std::multiplies<int>());
+      images_offset_in_file + sizeof(float) * total_images * 3 * 224 * 224;
 
-  TensorReader<float> image_reader(file, 0, image_batch_shape, "input");
+  TensorReader<float> image_reader(file, images_offset_in_file,
+                                   images_batch_shape, "input");
   TensorReader<int64_t> label_reader(file, labels_offset_in_file,
                                      label_batch_shape, "label");
 
