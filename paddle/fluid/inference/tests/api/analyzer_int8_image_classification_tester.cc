@@ -149,14 +149,15 @@ TEST(Analyzer_int8_resnet50, quantization) {
   SetConfig(&q_cfg);
 
   std::vector<std::vector<PaddleTensor>> input_slots_all;
-  SetInput(&input_slots_all, 100);
+  SetInput(&input_slots_all);
 
+  int warmup_batch_size = 100;
   std::shared_ptr<std::vector<PaddleTensor>> warmup_data =
-      GetWarmupData(input_slots_all, 100);
+      GetWarmupData(input_slots_all, warmup_batch_size);
 
   q_cfg.EnableMkldnnQuantizer();
   q_cfg.mkldnn_quantizer_config()->SetWarmupData(warmup_data);
-  q_cfg.mkldnn_quantizer_config()->SetWarmupBatchSize(100);
+  q_cfg.mkldnn_quantizer_config()->SetWarmupBatchSize(warmup_batch_size);
 
   CompareQuantizedAndAnalysis(
       reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
