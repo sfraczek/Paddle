@@ -128,7 +128,7 @@ void SetInput(std::vector<std::vector<PaddleTensor>> *inputs,
       images_offset_in_file + sizeof(float) * total_images * 3 * 224 * 224;
 
   TensorReader<float> image_reader(file, images_offset_in_file,
-                                   images_batch_shape, "input");
+                                   image_batch_shape, "input");
   TensorReader<int64_t> label_reader(file, labels_offset_in_file,
                                      label_batch_shape, "label");
 
