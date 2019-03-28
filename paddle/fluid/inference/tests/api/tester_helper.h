@@ -499,8 +499,11 @@ void CompareQuantizedAndAnalysis(
   PrintConfig(config, true);
   std::vector<std::vector<PaddleTensor>> analysis_outputs;
   std::vector<std::vector<PaddleTensor>> quantized_outputs;
+  LOG(INFO) << "--- quantized run --- ";
   TestOneThreadPrediction(qconfig, inputs, &quantized_outputs, true);
+  LOG(INFO) << "--- reference run --- ";
   TestOneThreadPrediction(config, inputs, &analysis_outputs, true);
+  LOG(INFO) << "--- comparing outputs --- ";
   CompareTopAccuracy(quantized_outputs, analysis_outputs);
 }
 
