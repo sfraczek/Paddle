@@ -73,8 +73,11 @@ class TensorReader {
 std::shared_ptr<std::vector<PaddleTensor>> GetWarmupData(
     const std::vector<std::vector<PaddleTensor>> &test_data, int num_images) {
   int test_data_batch_size = test_data[0][0].shape[0];
-  CHECK_LE(static_cast<size_t>(num_images),
-           test_data.size() * test_data_batch_size);
+  auto iterations = test_data.size();
+  PADDLE_ENFORCE(
+      static_cast<size_t>(num_images) <= iterations * test_data_batch_size,
+      "The requested quantization warmup data size " +
+          std::to_string(num_images) + " is bigger than all test data size.");
 
   PaddleTensor images;
   images.name = "input";

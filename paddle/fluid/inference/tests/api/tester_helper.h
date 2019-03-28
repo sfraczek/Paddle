@@ -354,11 +354,12 @@ void PredictionRun(PaddlePredictor *predictor,
 void PredictionRun(PaddlePredictor *predictor,
                    const std::vector<std::vector<PaddleTensor>> &inputs,
                    std::vector<std::vector<PaddleTensor>> *outputs) {
+  auto batch_size = inputs[0][0].shape[0];
   LOG(INFO) << "Prediction run " << inputs.size() << " iterations, batch size "
-            << inputs[0].size() << ".";
+            << batch_size << ".";
   outputs->resize(inputs.size());
   for (size_t i = 0; i < inputs.size(); i++) {
-    predictor->Run(inputs[i], &(*outputs)[i], inputs[i].size());
+    predictor->Run(inputs[i], &(*outputs)[i], batch_size);
   }
 }
 
