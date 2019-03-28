@@ -496,9 +496,9 @@ void CompareQuantizedAndAnalysis(
     const AnalysisConfig *config, const AnalysisConfig *qconfig,
     const std::vector<std::vector<PaddleTensor>> &inputs) {
   LOG(INFO) << "--- config quant --- ";
-  PrintConfig(qconfig, true);
+  PrintConfig(reinterpret_cast<const PaddlePredictor::Config *>(qconfig), true);
   LOG(INFO) << "--- config ref --- ";
-  PrintConfig(config, true);
+  PrintConfig(reinterpret_cast<const PaddlePredictor::Config *>(config), true);
   std::vector<std::vector<PaddleTensor>> analysis_outputs;
   std::vector<std::vector<PaddleTensor>> quantized_outputs;
   LOG(INFO) << "--- quantized run --- ";
