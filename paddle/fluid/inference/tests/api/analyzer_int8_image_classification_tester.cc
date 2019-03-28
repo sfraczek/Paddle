@@ -40,8 +40,8 @@ class TensorReader {
   TensorReader(std::ifstream &file, size_t beginning_offset,
                std::vector<int> shape, std::string name)
       : file_(file), position(beginning_offset), shape_(shape), name_(name) {
-    numel =
-        std::accumulate(shape_.begin(), shape_.end(), 1, std::multiplies<T>());
+    numel = std::accumulate(shape_.begin(), shape_.end(), 1,
+                            std::multiplies<size_t>());
   }
 
   PaddleTensor NextBatch() {
