@@ -161,10 +161,7 @@ TEST(Analyzer_int8_resnet50, quantization) {
   q_cfg.mkldnn_quantizer_config()->SetWarmupData(warmup_data);
   q_cfg.mkldnn_quantizer_config()->SetWarmupBatchSize(warmup_batch_size);
 
-  CompareQuantizedAndAnalysis(
-      reinterpret_cast<const PaddlePredictor::Config *>(&cfg),
-      reinterpret_cast<const PaddlePredictor::Config *>(&q_cfg),
-      input_slots_all);
+  CompareQuantizedAndAnalysis(&cfg, &q_cfg, input_slots_all);
 }
 
 TEST(Analyzer_int8_resnet50, profile) {

@@ -373,10 +373,10 @@ void TestOneThreadPrediction(
 }
 
 void TestOneThreadPrediction(
-    const PaddlePredictor::Config *config,
+    const AnalysisConfig *config,
     const std::vector<std::vector<PaddleTensor>> &inputs,
     std::vector<std::vector<PaddleTensor>> *outputs, bool use_analysis = true) {
-  auto predictor = CreateTestPredictor(config, use_analysis);
+  auto predictor = CreatePaddlePredictor<AnalysisConfig>(*config);
   PredictionRun(predictor.get(), inputs, outputs);
 }
 
@@ -493,13 +493,12 @@ void CompareNativeAndAnalysis(
 }
 
 void CompareQuantizedAndAnalysis(
-    const PaddlePredictor::Config *config,
-    const PaddlePredictor::Config *qconfig,
+    const AnalysisConfig *config, const AnalysisConfig *qconfig,
     const std::vector<std::vector<PaddleTensor>> &inputs) {
   LOG(INFO) << "--- config quant --- ";
-  PrintConfig(qconfig, true);
+  // PrintConfig(qconfig, true);
   LOG(INFO) << "--- config ref --- ";
-  PrintConfig(config, true);
+  // PrintConfig(config, true);
   std::vector<std::vector<PaddleTensor>> analysis_outputs;
   std::vector<std::vector<PaddleTensor>> quantized_outputs;
   LOG(INFO) << "--- quantized run --- ";
