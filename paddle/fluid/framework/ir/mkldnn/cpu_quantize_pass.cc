@@ -42,46 +42,44 @@ void CPUQuantizePass::QuantizeInput(Graph* g, Node* op, Node* input,
                                     std::string input_name, double scale_to_one,
                                     bool is_unsigned,
                                     std::string scale_attr_name) const {
-  QuantizeInputs(g, op, {input}, input_name, scale_to_one, is_unsigned,
-                 scale_attr_name);
-  //  unsigned max = is_unsigned ? U8_MAX : S8_MAX;
-  //  float scale = scale_to_one * max;
-  //
-  //  // Create quantize output variable
-  //  VarDesc quantize_out_desc(patterns::PDNodeName("quantize", "out"));
-  //  auto* quantize_out_node = g->CreateVarNode(&quantize_out_desc);
-  //
-  //  // create a quantize op node
-  //  OpDesc q_desc;
-  //  q_desc.SetType("quantize");
-  //  q_desc.SetInput("Input", std::vector<std::string>({input->Name()}));
-  //  q_desc.SetOutput("Output",
-  //                   std::vector<std::string>({quantize_out_node->Name()}));
-  //  q_desc.SetAttr("Scale", scale);
-  //  q_desc.SetAttr("is_negative_input", !is_unsigned);
-  //  auto quantize_op = g->CreateOpNode(&q_desc);  // OpDesc will be copied.
-  //
-  //  // update op's input
-  //  op->Op()->SetInput(input_name,
-  //                     std::vector<std::string>({quantize_out_node->Name()}));
-  //
-  //  // link quantize op
-  //  UnlinkNodes(input, op);
-  //  IR_NODE_LINK_TO(input, quantize_op);
-  //  IR_NODE_LINK_TO(quantize_op, quantize_out_node);
-  //  IR_NODE_LINK_TO(quantize_out_node, op);
-  //
-  //  if (!scale_attr_name.empty()) op->Op()->SetAttr(scale_attr_name, scale);
+  //  QuantizeInputs(g, op, {input}, input_name, scale_to_one,
+  //                 scale_attr_name);
+  unsigned max = is_unsigned ? U8_MAX : S8_MAX;
+  float scale = scale_to_one * max;
+
+  // Create quantize output variable
+  VarDesc quantize_out_desc(patterns::PDNodeName("quantize", "out"));
+  auto* quantize_out_node = g->CreateVarNode(&quantize_out_desc);
+
+  // create a quantize op node
+  OpDesc q_desc;
+  q_desc.SetType("quantize");
+  q_desc.SetInput("Input", std::vector<std::string>({input->Name()}));
+  q_desc.SetOutput("Output",
+                   std::vector<std::string>({quantize_out_node->Name()}));
+  q_desc.SetAttr("Scale", scale);
+  q_desc.SetAttr("is_negative_input", !is_unsigned);
+  auto quantize_op = g->CreateOpNode(&q_desc);  // OpDesc will be copied.
+
+  // update op's input
+  op->Op()->SetInput(input_name,
+                     std::vector<std::string>({quantize_out_node->Name()}));
+
+  // link quantize op
+  UnlinkNodes(input, op);
+  IR_NODE_LINK_TO(input, quantize_op);
+  IR_NODE_LINK_TO(quantize_op, quantize_out_node);
+  IR_NODE_LINK_TO(quantize_out_node, op);
+
+  if (!scale_attr_name.empty()) op->Op()->SetAttr(scale_attr_name, scale);
 }
 
 void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op,
                                      std::vector<Node*> inputs,
                                      std::string input_name,
-                                     const VarQuantScale& scales,
-                                     bool is_unsigned,
+                                     VarQuantScale* scales,
                                      std::string scale_attr_name) const {
   PADDLE_ENFORCE_GE(inputs.size(), 1);
-  unsigned max = is_unsigned ? U8_MAX : S8_MAX;
 
   // create a quantize op desc prototype
   OpDesc q_desc;
@@ -90,14 +88,16 @@ void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op,
   std::vector<Node*> quantize_out_nodes(inputs.size());
   std::vector<std::string> quantize_out_node_names(inputs.size());
 
+  float scale = 1.0f;
   for (size_t i = 0; i < inputs.size(); i++) {
     // Create quantize output variable
     VarDesc quantize_out_desc(patterns::PDNodeName("quantize", "out"));
     quantize_out_nodes[i] = g->CreateVarNode(&quantize_out_desc);
     quantize_out_node_names[i] = quantize_out_nodes[i]->Name();
 
-    bool is_unsigned = scales[inputs[i]->Name()].first;
-    float scale = scales[inputs[i]->Name()].second.data<double>()[0] * max;
+    bool is_unsigned = (*scales)[inputs[i]->Name()].first;
+    unsigned max = is_unsigned ? U8_MAX : S8_MAX;
+    scale = (*scales)[inputs[i]->Name()].second.data<double>()[0] * max;
     q_desc.SetAttr("Scale", scale);
     q_desc.SetInput("Input", std::vector<std::string>({inputs[i]->Name()}));
     q_desc.SetOutput("Output",
@@ -330,12 +330,7 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
     auto scales = Get<VarQuantScale>("quant_var_scales");
 
     auto inputs = concat_op->inputs;
-    for (int i = 0; i < inputs.size(); i++) {
-      auto* input = inputs[i];
-      auto input_scale = scales[input->Name()].second.data<double>()[i];
-      bool is_input_unsigned = scales[input->Name()].first;
-      QuantizeInput(g, concat_op, input, "X", scales, is_input_unsigned);
-    }
+    QuantizeInputs(g, concat_op, inputs, "X", &scales);
 
     auto output_scale = scales[concat_out->Name()].second.data<double>()[0];
 
@@ -364,6 +359,14 @@ std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
   QuantizeConv(graph, true /* with_residual_data */);
   QuantizePool(graph);
   QuantizeTranspose2(graph);
+  QuantizeConcat(graph);
+  // QuantizeConv(graph.get(), false [> with_residual_data <]);
+  // QuantizeConv(graph.get(), true [> with_residual_data <]);
+  // QuantizePool(graph.get());
+  // QuantizeTranspose2(graph.get());
+  // QuantizeConcat(graph.get());
+
+  return graph;
 }
 
 }  // namespace ir

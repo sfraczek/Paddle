@@ -58,8 +58,8 @@ class CPUQuantizePass : public FusePassBase {
                      std::string scale_attr_name = "") const;
 
   void QuantizeInputs(Graph* g, Node* op, std::vector<Node*> input,
-                      std::string input_name, const VarQuantScale& scales,
-                      bool is_unsigned, std::string scale_attr_name = "") const;
+                      std::string input_name, VarQuantScale* scales,
+                      std::string scale_attr_name = "") const;
 
   void DequantizeOutput(Graph* g, Node* op, Node* output,
                         std::string output_name, double scale_to_one,
