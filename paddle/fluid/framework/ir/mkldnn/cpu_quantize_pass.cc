@@ -261,20 +261,17 @@ void CPUQuantizePass::QuantizeTranspose2(Graph* graph) const {
                   quantize_transpose_count);
 }
 
-std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
-    std::unique_ptr<ir::Graph> graph) const {
+void CPUQuantizePass::ApplyImpl(ir::Graph* graph) const {
   VLOG(3) << "Quantizing the graph.";
   PADDLE_ENFORCE(graph);
   FusePassBase::Init(name_scope_, graph);
 
   PADDLE_ENFORCE(param_scope());
 
-  QuantizeConv(graph.get(), false /* with_residual_data */);
-  QuantizeConv(graph.get(), true /* with_residual_data */);
-  QuantizePool(graph.get());
-  QuantizeTranspose2(graph.get());
-
-  return graph;
+  QuantizeConv(graph, false /* with_residual_data */);
+  QuantizeConv(graph, true /* with_residual_data */);
+  QuantizePool(graph);
+  QuantizeTranspose2(graph);
 }
 
 }  // namespace ir
