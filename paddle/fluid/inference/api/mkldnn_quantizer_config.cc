@@ -30,6 +30,11 @@ MkldnnQuantizerConfig::MkldnnQuantizerConfig() {
   rules_["transpose2"]["X"] = ScaleAlgo::KL;
   rules_["transpose2"]["Out"] = ScaleAlgo::KL;
   rules_["transpose2"]["XShape"] = ScaleAlgo::NONE;  // do not compute scale
+
+  rules_["prior_box"]["Input"] = ScaleAlgo::KL;
+  rules_["prior_box"]["Image"] = ScaleAlgo::NONE;
+  rules_["prior_box"]["Boxes"] = ScaleAlgo::NONE;
+  rules_["prior_box"]["Variances"] = ScaleAlgo::NONE;
 }
 
 ScaleAlgo MkldnnQuantizerConfig::scale_algo(
