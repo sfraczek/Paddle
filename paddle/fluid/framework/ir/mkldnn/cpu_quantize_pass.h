@@ -18,7 +18,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <vector>
 #include "paddle/fluid/framework/ir/fuse_pass_base.h"
 #include "paddle/fluid/framework/ir/graph.h"
 #include "paddle/fluid/framework/ir/graph_pattern_detector.h"
@@ -50,6 +49,8 @@ class CPUQuantizePass : public FusePassBase {
   void QuantizePool(Graph* graph) const;
 
   void QuantizeTranspose2(Graph* graph) const;
+
+  void QuantizePriorBox(Graph* graph) const;
 
   void QuantizeConcat(Graph* graph) const;
 

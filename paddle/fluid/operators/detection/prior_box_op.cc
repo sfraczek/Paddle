@@ -14,6 +14,10 @@ limitations under the License. */
 
 #include "paddle/fluid/operators/detection/prior_box_op.h"
 
+#ifdef PADDLE_WITH_MKLDNN
+#include "paddle/fluid/platform/mkldnn_helper.h"
+#endif
+
 namespace paddle {
 namespace operators {
 
@@ -71,8 +75,18 @@ class PriorBoxOp : public framework::OperatorWithKernel {
  protected:
   framework::OpKernelType GetExpectedKernelType(
       const framework::ExecutionContext& ctx) const override {
+    framework::LibraryType library_{framework::LibraryType::kPlain};
+    framework::DataLayout layout_ = framework::DataLayout::kAnyLayout;
+#ifdef PADDLE_WITH_MKLDNN
+    if (library_ == framework::LibraryType::kPlain &&
+        platform::CanMKLDNNBeUsed(ctx)) {
+      library_ = framework::LibraryType::kMKLDNN;
+      layout_ = framework::DataLayout::kMKLDNN;
+    }
+#endif
     return framework::OpKernelType(
-        ctx.Input<framework::Tensor>("Input")->type(), ctx.device_context());
+        ctx.Input<framework::Tensor>("Input")->type(), ctx.GetPlace(), layout_,
+        library_);
   }
 };
 
@@ -154,6 +168,15 @@ class PriorBoxOpMaker : public framework::OpProtoAndCheckerMaker {
         "[min, max, aspect_ratios], which is consistent with Caffe."
         "Please note, this order affects the weights order of convolution layer"
         "followed by and does not affect the final detection results.")
+        .SetDefault(false);
+    AddAttr<bool>("use_mkldnn",
+                  "(bool, default false) Only used in mkldnn kernel")
+        .SetDefault(false);
+    AddAttr<bool>("use_quantizer",
+                  "(bool, default false) "
+                  "Set to true for operators that should be quantized and use "
+                  "int8 kernel. "
+                  "Only used on CPU.")
         .SetDefault(false);
     AddComment(R"DOC(
 Prior box operator
