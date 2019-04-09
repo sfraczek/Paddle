@@ -1198,6 +1198,22 @@ PDNode *patterns::PriorBox::operator()() {
   return boxes_var;
 }
 
+PDNode *patterns::Reshape2::operator()() {
+  auto reshape_op =
+      pattern->NewNode(reshape_op_repr())->assert_is_op("reshape2");
+
+  auto input_var = pattern->NewNode(reshape_in_repr())
+                       ->AsInput()
+                       ->assert_is_op_input("reshape2", "X");
+
+  auto output_var = pattern->NewNode(reshape_out_repr())
+                        ->AsOutput()
+                        ->assert_is_op_output("reshape2", "Out");
+
+  reshape_op->LinksFrom({input_var}).LinksTo({output_var});
+  return output_var;
+}
+
 PDNode *patterns::Concat::operator()() {
   auto concat_op = pattern->NewNode(concat_op_repr())->assert_is_op("concat");
 

@@ -52,6 +52,8 @@ class CPUQuantizePass : public FusePassBase {
 
   void QuantizePriorBox(Graph* graph) const;
 
+  void QuantizeReshape2(Graph* graph) const;
+
   void QuantizeConcat(Graph* graph) const;
 
   void QuantizeInput(Graph* g, Node* op, Node* input, std::string input_name,

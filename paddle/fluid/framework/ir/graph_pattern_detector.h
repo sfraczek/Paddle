@@ -739,6 +739,21 @@ struct PriorBox : public PatternBase {
   PATTERN_DECL_NODE(prior_box_variances);
 };
 
+// Reshape2 op
+// Forward pass for reshape.
+// reshape_input is the input.
+// reshape_output is a result of the operator.
+struct Reshape2 : public PatternBase {
+  Reshape2(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "reshape2") {}
+
+  PDNode* operator()();
+
+  PATTERN_DECL_NODE(reshape_op);
+  PATTERN_DECL_NODE(reshape_in);
+  PATTERN_DECL_NODE(reshape_out);
+};
+
 // Concat op
 // Forward pass for concat.
 // concat_out is a result of the operator.
