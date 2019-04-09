@@ -347,8 +347,7 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
   PrettyLogDetail("---    quantized %d concat ops", quantize_concat_count);
 }
 
-std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
-    std::unique_ptr<ir::Graph> graph) const {
+void CPUQuantizePass::ApplyImpl(ir::Graph* graph) const {
   VLOG(3) << "Quantizing the graph.";
   PADDLE_ENFORCE(graph);
   FusePassBase::Init(name_scope_, graph);
@@ -365,8 +364,6 @@ std::unique_ptr<ir::Graph> CPUQuantizePass::ApplyImpl(
   // QuantizePool(graph.get());
   // QuantizeTranspose2(graph.get());
   // QuantizeConcat(graph.get());
-
-  return graph;
 }
 
 }  // namespace ir
