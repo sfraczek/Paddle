@@ -203,10 +203,12 @@ class MKLDNNHandler {
       std::shared_ptr<mkldnn::memory::primitive_desc>& dst_pd,  // NOLINT
       std::shared_ptr<mkldnn::memory>& dst_memory) {            // NOLINT
     T* output_data = output->mutable_data<T>(ctx.GetPlace());
+    mkldnn::memory::format dst_fmt = platform::MKLDNNFormatForSize(
+        dst_tz.size(), mkldnn::memory::format::nhwc);
     auto dst_md = platform::MKLDNNMemDesc(
         {dst_tz}, paddle::framework::ToMKLDNNDataType(
                       framework::DataTypeTrait<T>::DataType),
-        mkldnn::memory::format::nhwc);
+        dst_fmt);
     dst_pd.reset(new mkldnn::memory::primitive_desc(dst_md, engine));
     dst_memory.reset(new mkldnn::memory(*dst_pd, to_void_cast<T>(output_data)));
   }

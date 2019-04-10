@@ -50,35 +50,34 @@ bool AnalysisPredictor::MkldnnQuantizer::CalculateScales() {
 
       auto glambda = [&](const VariableNameMap& connections, bool is_output) {
         for (auto const& conn : connections) {
-          if (conn.second.size() == 0) continue;
-          auto& var_name = conn.second[0];
+          for (const auto& var_name : conn.second) {
+            // skip if scale already computed
+            if (scales_.find(var_name) != scales_.end()) return;
 
-          // skip if scale already computed
-          if (scales_.find(var_name) != scales_.end()) return;
+            auto* var = predictor_.sub_scope_->FindVar(var_name);
+            PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
+            PADDLE_ENFORCE(var->IsType<LoDTensor>(),
+                           "Only support lod tensor now.");
+            LoDTensor* var_tensor = var->GetMutable<LoDTensor>();
 
-          auto* var = predictor_.sub_scope_->FindVar(var_name);
-          PADDLE_ENFORCE(var, "%s is not in the scope", var_name);
-          PADDLE_ENFORCE(var->IsType<LoDTensor>(),
-                         "Only support lod tensor now.");
-          LoDTensor* var_tensor = var->GetMutable<LoDTensor>();
-
-          // force unsigned type if already know it
-          bool is_unsigned = false;
-          if (is_output && op->Type() == "conv2d") {
-            // output of conv2d with relu must be unsigned
-            is_unsigned = op->HasAttr("fuse_relu") &&
-                          boost::get<bool>(op->GetAttr("fuse_relu"));
-          } else if (is_output &&
-                     (op->Type() == "pool2d" || op->Type() == "transpose2")) {
-            // output of pool2d with unsigned input must be unsigned
-            auto input_var_name = op->Input("X")[0];
-            if (scales_.find(input_var_name) != scales_.end()) {
-              is_unsigned = scales_[input_var_name].first;
+            // force unsigned type if already know it
+            bool is_unsigned = false;
+            if (is_output && op->Type() == "conv2d") {
+              // output of conv2d with relu must be unsigned
+              is_unsigned = op->HasAttr("fuse_relu") &&
+                            boost::get<bool>(op->GetAttr("fuse_relu"));
+            } else if (is_output &&
+                       (op->Type() == "pool2d" || op->Type() == "transpose2")) {
+              // output of pool2d with unsigned input must be unsigned
+              auto input_var_name = op->Input("X")[0];
+              if (scales_.find(input_var_name) != scales_.end()) {
+                is_unsigned = scales_[input_var_name].first;
+              }
             }
-          }
 
-          CalculateSingleScale(op->Type(), conn.first, var_name, *var_tensor,
-                               is_unsigned);
+            CalculateSingleScale(op->Type(), conn.first, var_name, *var_tensor,
+                                 is_unsigned);
+          }
         }
       };
 

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "paddle/fluid/framework/ir/mkldnn/cpu_quantize_pass.h"
+#include <limits>
 #include <utility>
 #include <vector>
 #include "paddle/fluid/framework/eigen.h"
@@ -74,11 +75,10 @@ void CPUQuantizePass::QuantizeInput(Graph* g, Node* op, Node* input,
   if (!scale_attr_name.empty()) op->Op()->SetAttr(scale_attr_name, scale);
 }
 
-void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op,
-                                     std::vector<Node*> inputs,
-                                     std::string input_name,
-                                     VarQuantScale* scales,
+void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op, std::string input_name,
+                                     VarQuantScale* scales, bool* are_unsigned,
                                      std::string scale_attr_name) const {
+  auto inputs = op->inputs;
   PADDLE_ENFORCE_GE(inputs.size(), 1);
 
   // create a quantize op desc prototype
@@ -88,21 +88,29 @@ void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op,
   std::vector<Node*> quantize_out_nodes(inputs.size());
   std::vector<std::string> quantize_out_node_names(inputs.size());
 
-  float scale = 1.0f;
+  // treat all inputs as unsigned iff all the inputs are unsigned
+  *are_unsigned = true;
+  double scale_min = std::numeric_limits<double>::max();
+  for (const auto& input : inputs) {
+    double scale = (*scales)[input->Name()].second.data<double>()[0];
+    if (scale < scale_min) scale_min = scale;
+    bool is_unsigned = (*scales)[input->Name()].first;
+    *are_unsigned = *are_unsigned && is_unsigned;
+  }
+  unsigned max = *are_unsigned ? U8_MAX : S8_MAX;
+  float scale = scale_min * max;
+
   for (size_t i = 0; i < inputs.size(); i++) {
     // Create quantize output variable
     VarDesc quantize_out_desc(patterns::PDNodeName("quantize", "out"));
     quantize_out_nodes[i] = g->CreateVarNode(&quantize_out_desc);
     quantize_out_node_names[i] = quantize_out_nodes[i]->Name();
 
-    bool is_unsigned = (*scales)[inputs[i]->Name()].first;
-    unsigned max = is_unsigned ? U8_MAX : S8_MAX;
-    scale = (*scales)[inputs[i]->Name()].second.data<double>()[0] * max;
     q_desc.SetAttr("Scale", scale);
     q_desc.SetInput("Input", std::vector<std::string>({inputs[i]->Name()}));
     q_desc.SetOutput("Output",
                      std::vector<std::string>({quantize_out_node_names[i]}));
-    q_desc.SetAttr("is_negative_input", !is_unsigned);
+    q_desc.SetAttr("is_negative_input", !*are_unsigned);
     auto quantize_op = g->CreateOpNode(&q_desc);  // OpDesc will be copied.
 
     // link quantize op
@@ -329,14 +337,13 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
     // get scales calculated after warmup, they scale variables to MAX=1.0
     auto scales = Get<VarQuantScale>("quant_var_scales");
 
-    auto inputs = concat_op->inputs;
-    QuantizeInputs(g, concat_op, inputs, "X", &scales);
+    bool are_all_inputs_unsigned = false;
+    QuantizeInputs(g, concat_op, "X", &scales, &are_all_inputs_unsigned);
 
     auto output_scale = scales[concat_out->Name()].second.data<double>()[0];
 
-    bool is_output_unsigned = scales[concat_out->Name()].first;
     DequantizeOutput(g, concat_op, concat_out, "Out", output_scale,
-                     is_output_unsigned);
+                     are_all_inputs_unsigned);
 
     ++quantize_concat_count;
   };
