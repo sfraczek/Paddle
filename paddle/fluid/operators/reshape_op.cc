@@ -238,9 +238,12 @@ class ReshapeKernel {
 //    framework::StringToDataLayout(data_format);
 
 #ifdef PADDLE_WITH_MKLDNN
+    auto default_format = mkldnn::memory::format::nchw;
+    if (ctx.Attr<bool>("use_quantizer") == true) {
+      default_format = mkldnn::memory::format::nhwc;
+    }
     mkldnn::memory::format dst_fmt = platform::MKLDNNFormatForSize(
-        paddle::framework::vectorize2int(out_dims).size(),
-        mkldnn::memory::format::nchw);
+        paddle::framework::vectorize2int(out_dims).size(), default_format);
     out->set_layout(framework::DataLayout::kMKLDNN);
     out->set_format(dst_fmt);
 //       if (library_ == framework::LibraryType::kPlain &&

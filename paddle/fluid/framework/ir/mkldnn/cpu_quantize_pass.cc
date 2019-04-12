@@ -343,7 +343,6 @@ void CPUQuantizePass::QuantizePriorBox(Graph* graph) const {
     QuantizeInput(g, prior_box_op, prior_box_input, "Input", input_scale,
                   is_input_unsigned);
 
-    std::cout << prior_box_op->id() << std::endl;
     ++quantize_prior_box_count;
   };
 
@@ -388,7 +387,6 @@ void CPUQuantizePass::QuantizeReshape2(Graph* graph) const {
     DequantizeOutput(g, reshape_op, reshape_out, "Out", output_scale,
                      is_output_unsigned);
 
-    std::cout << reshape_op->id() << std::endl;
     ++quantize_reshape_count;
   };
 

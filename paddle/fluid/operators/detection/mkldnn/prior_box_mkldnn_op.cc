@@ -38,9 +38,9 @@ class PriorBoxINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     std::vector<float> aspect_ratios;
     ExpandAspectRatios(input_aspect_ratio, flip, &aspect_ratios);
 
-    T step_w = static_cast<T>(ctx.Attr<float>("step_w"));
-    T step_h = static_cast<T>(ctx.Attr<float>("step_h"));
-    T offset = static_cast<T>(ctx.Attr<float>("offset"));
+    float step_w = static_cast<float>(ctx.Attr<float>("step_w"));
+    float step_h = static_cast<float>(ctx.Attr<float>("step_h"));
+    float offset = static_cast<float>(ctx.Attr<float>("offset"));
 
     // These dims remain the same because this input was not quantized
     auto img_width = image->dims()[3];
@@ -55,10 +55,10 @@ class PriorBoxINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       feature_height = input->dims()[1];
     }
 
-    T step_width, step_height;
+    float step_width, step_height;
     if (step_w == 0 || step_h == 0) {
-      step_width = static_cast<T>(img_width) / feature_width;
-      step_height = static_cast<T>(img_height) / feature_height;
+      step_width = static_cast<float>(img_width) / feature_width;
+      step_height = static_cast<float>(img_height) / feature_height;
     } else {
       step_width = step_w;
       step_height = step_h;
@@ -69,15 +69,15 @@ class PriorBoxINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       num_priors += max_sizes.size();
     }
 
-    boxes->mutable_data<T>(ctx.GetPlace());
-    vars->mutable_data<T>(ctx.GetPlace());
+    boxes->mutable_data<float>(ctx.GetPlace());
+    vars->mutable_data<float>(ctx.GetPlace());
 
-    T* b_t = boxes->data<T>();
+    float* b_t = boxes->data<float>();
     for (int h = 0; h < feature_height; ++h) {
       for (int w = 0; w < feature_width; ++w) {
-        T center_x = (w + offset) * step_width;
-        T center_y = (h + offset) * step_height;
-        T box_width, box_height;
+        float center_x = (w + offset) * step_width;
+        float center_y = (h + offset) * step_height;
+        float box_width, box_height;
         for (size_t s = 0; s < min_sizes.size(); ++s) {
           auto min_size = min_sizes[s];
           if (min_max_aspect_ratios_order) {
@@ -139,17 +139,17 @@ class PriorBoxINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     }
 
     if (clip) {
-      T* dt = boxes->data<T>();
-      std::transform(dt, dt + boxes->numel(), dt, [](T v) -> T {
-        return std::min<T>(std::max<T>(v, 0.), 1.);
+      float* dt = boxes->data<float>();
+      std::transform(dt, dt + boxes->numel(), dt, [](float v) -> float {
+        return std::min<float>(std::max<float>(v, 0.), 1.);
       });
     }
 
     framework::Tensor var_t;
-    var_t.mutable_data<T>(
+    var_t.mutable_data<float>(
         framework::make_ddim({1, static_cast<int>(variances.size())}),
         ctx.GetPlace());
-    auto var_et = framework::EigenTensor<T, 2>::From(var_t);
+    auto var_et = framework::EigenTensor<float, 2>::From(var_t);
 
 #pragma omp parallel for
     for (size_t i = 0; i < variances.size(); ++i) {
@@ -160,7 +160,7 @@ class PriorBoxINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     auto var_dim = vars->dims();
     vars->Resize({box_num, static_cast<int>(variances.size())});
 
-    auto e_vars = framework::EigenMatrix<T, Eigen::RowMajor>::From(*vars);
+    auto e_vars = framework::EigenMatrix<float, Eigen::RowMajor>::From(*vars);
 
 #pragma omp parallel for collapse(2)
     for (int i = 0; i < box_num; ++i) {
