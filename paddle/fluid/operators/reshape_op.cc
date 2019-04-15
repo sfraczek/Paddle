@@ -244,7 +244,8 @@ class ReshapeKernel {
     }
     mkldnn::memory::format dst_fmt = platform::MKLDNNFormatForSize(
         paddle::framework::vectorize2int(out_dims).size(), default_format);
-    out->set_layout(framework::DataLayout::kMKLDNN);
+    // out->set_layout(framework::DataLayout::kMKLDNN);
+    out->set_layout(framework::DataLayout::kNHWC);
     out->set_format(dst_fmt);
 //       if (library_ == framework::LibraryType::kPlain &&
 //        platform::CanMKLDNNBeUsed(ctx)) {

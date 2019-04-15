@@ -427,6 +427,10 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
     DequantizeOutput(g, concat_op, concat_out, "Out", output_scale,
                      are_all_inputs_unsigned);
 
+    // std::cout << "axis: " << boost::get<int>(concat_op_desc->GetAttr("axis"))
+    // << std::endl;
+    // concat_op_desc->SetAttr("axis", 2);
+
     ++quantize_concat_count;
   };
 

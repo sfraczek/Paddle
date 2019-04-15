@@ -204,6 +204,8 @@ class ConcatMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
       for (size_t i = 0; i < multi_input.size(); i++) {
         prim_creator.SetSrcDataHandleByIndex(
             *srcs, i, to_void_cast<T>(multi_input[i]->data<T>()));
+        auto* input_data = multi_input[i]->data<T>();
+        (void)input_data;
       }
       prim_creator.SetDstDataHandle(*dst_mem, output->mutable_data<T>(place));
     }
@@ -212,6 +214,8 @@ class ConcatMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
 
     output->set_layout(DataLayout::kMKLDNN);
     output->set_format(GetDstMemFormat(*concat_pd));
+    auto* output_data = output->data<T>();
+    (void)output_data;
     // output->set_mkldnn_prim_desc(concat_pd->dst_primitive_desc());
   }
 };

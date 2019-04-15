@@ -51,8 +51,9 @@ class ReQuantOpKernel : public framework::OpKernel<T> {
                                                 // requantize from different
                                                 // data type (e.g., s8 to u8)
     mkldnn::memory::format src_fmt = input->format();
-    mkldnn::memory::format dst_fmt =
-        platform::MKLDNNFormatForSize(dst_tz.size(), memory::format::nhwc);
+    mkldnn::memory::format dst_fmt = src_fmt;
+    // mkldnn::memory::format dst_fmt =
+    // platform::MKLDNNFormatForSize(dst_tz.size(), memory::format::nhwc);
 
     const T* input_data = input->data<T>();
     T* output_data = output->mutable_data<T>(ctx.GetPlace());
