@@ -232,27 +232,11 @@ class ReshapeKernel {
         ctx.template device_context<platform::DeviceContext>(), out);
     out->Resize(out_dims);
 
-//   framework::LibraryType library_{framework::LibraryType::kPlain};
-//    std::string data_format = ctx.Attr<std::string>("data_format");
-//    framework::DataLayout layout_ =
-//    framework::StringToDataLayout(data_format);
-
 #ifdef PADDLE_WITH_MKLDNN
-    auto default_format = mkldnn::memory::format::nchw;
-    if (ctx.Attr<bool>("use_quantizer") == true) {
-      default_format = mkldnn::memory::format::nhwc;
-    }
     mkldnn::memory::format dst_fmt = platform::MKLDNNFormatForSize(
-        paddle::framework::vectorize2int(out_dims).size(), default_format);
-    // out->set_layout(framework::DataLayout::kMKLDNN);
-    out->set_layout(framework::DataLayout::kNHWC);
+        paddle::framework::vectorize2int(out_dims).size(),
+        mkldnn::memory::format::nchw);
     out->set_format(dst_fmt);
-//       if (library_ == framework::LibraryType::kPlain &&
-//        platform::CanMKLDNNBeUsed(ctx)) {
-//      library_ = framework::LibraryType::kMKLDNN;
-//      layout_ = framework::DataLayout::kMKLDNN;
-//    }
-
 #endif
   }
 };

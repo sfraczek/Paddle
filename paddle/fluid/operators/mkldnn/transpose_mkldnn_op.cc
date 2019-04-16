@@ -87,7 +87,7 @@ class TransposeINT8MKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     output->ShareDataWith(*input);
     // output->set_layout(DataLayout::kMKLDNN);
     // output->set_format(input->format());
-    output->set_layout(DataLayout::kNHWC);
+    output->set_layout(DataLayout::kNCHW);
     output->set_format(mkldnn::memory::format::format_undef);
   }
 };
