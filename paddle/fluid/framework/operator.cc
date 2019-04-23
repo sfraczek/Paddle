@@ -934,6 +934,11 @@ void OperatorWithKernel::RunImpl(const Scope& scope,
   }
   // TODO(panyx0718): ExecutionContext should only depend on RuntimeContext
   // not Scope. Imperative mode only pass inputs and get outputs.
+  // std::string s = "none";
+  // if (this->HasAttr("use_mkldnn")) {
+  //   s = std::to_string(this->Attr<bool>("use_mkldnn"));
+  // }
+  // std::cout << "use_mkldnn: " << s << std::endl;
   (*kernel_func_)(ExecutionContext(*this, exec_scope, *dev_ctx, *runtime_ctx,
                                    kernel_configs));
 
@@ -977,6 +982,11 @@ void OperatorWithKernel::ChooseKernel(const RuntimeContext& ctx,
 
   OpKernelMap& kernels = kernels_iter->second;
 
+  // std::string s = "none";
+  // if (this->HasAttr("use_mkldnn")) {
+  //   s = std::to_string(this->Attr<bool>("use_mkldnn"));
+  // }
+  // std::cout << "use_mkldnn: " << s << std::endl;
   auto expected_kernel_key = this->GetExpectedKernelType(
       ExecutionContext(*this, scope, *dev_ctx, ctx, nullptr));
   VLOG(3) << "expected_kernel_key:" << expected_kernel_key;

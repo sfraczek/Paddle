@@ -16,28 +16,42 @@ limitations under the License. */
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include "paddle/fluid/framework/block_desc.h"
 
 namespace paddle {
 namespace framework {
 namespace ir {
 
-void MKLDNNPlacementPass::ApplyImpl(ir::Graph* graph) const {
-  VLOG(3) << "Applies MKL-DNN placement strategy.";
+void MKLDNNPlacementPass::SetUseMKLDNN(OpDesc* op) const {
   const auto& op_types_list =
       Get<std::unordered_set<std::string>>("mkldnn_enabled_op_types");
+  if (op->HasAttr("use_mkldnn") || op->HasProtoAttr("use_mkldnn")) {
+    if (op_types_list.empty()) {
+      op->SetAttr("use_mkldnn", true);
+    } else if (std::find(op_types_list.begin(), op_types_list.end(),
+                         op->Type()) != op_types_list.end()) {
+      op->SetAttr("use_mkldnn", true);
+    }
+    PADDLE_ENFORCE_EQ(boost::get<bool>(op->GetAttr("use_mkldnn")), true);
+  }
+}
+
+void MKLDNNPlacementPass::ApplyImpl(ir::Graph* graph) const {
+  VLOG(3) << "Applies MKL-DNN placement strategy.";
   if (!graph->Has("use_mkldnn")) {
     graph->Set<bool>("use_mkldnn", new bool(true));
   }
   for (const Node* n : graph->Nodes()) {
     if (n->IsOp()) {
       auto* op = n->Op();
-      if (op->HasAttr("use_mkldnn") || op->HasProtoAttr("use_mkldnn")) {
-        if (op_types_list.empty()) {
-          op->SetAttr("use_mkldnn", true);
-        } else if (std::find(op_types_list.begin(), op_types_list.end(),
-                             n->Name()) != op_types_list.end()) {
-          op->SetAttr("use_mkldnn", true);
+      if (op->Type() == "while") {
+        auto* block =
+            boost::get<framework::BlockDesc*>(op->GetAttr("sub_block"));
+        for (auto* op_desc : block->AllOps()) {
+          SetUseMKLDNN(op_desc);
         }
+      } else {
+        SetUseMKLDNN(op);
       }
     }
   }

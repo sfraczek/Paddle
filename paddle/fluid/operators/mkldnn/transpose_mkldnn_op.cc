@@ -38,6 +38,8 @@ class TransposeMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
     auto* output = ctx.Output<Tensor>("Out");
     const T* input_data = input->data<T>();
 
+    static int mkldnn_counter = 0;
+    std::cout << "** MKLDNN TRANSPOSE " << ++mkldnn_counter << std::endl;
     if (ndims == 1) {
       output->ShareDataWith(*input);
       return;

@@ -95,6 +95,10 @@ class WhileOp : public framework::OperatorBase {
             t->clear();
           }
         }
+        // std::cout << "operator: " << ctx->ops_[16]->Type() << std::endl;
+        // std::cout << "use_mkldnn: "
+        //           << std::to_string(ctx->ops_[16]->Attr<bool>("use_mkldnn"))
+        //           << std::endl;
         executor.RunPreparedContext(ctx.get(), &current_scope, false, false,
                                     false);
       }

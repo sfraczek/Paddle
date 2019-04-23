@@ -27,6 +27,8 @@ namespace ir {
 class MKLDNNPlacementPass : public Pass {
  protected:
   void ApplyImpl(ir::Graph* graph) const override;
+
+  void SetUseMKLDNN(OpDesc* op) const;
 };
 
 }  // namespace ir

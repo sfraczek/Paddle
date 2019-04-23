@@ -67,6 +67,8 @@ class TransposeKernel : public framework::OpKernel<T> {
     int ndims = axis.size();
     auto& dev_ctx = context.template device_context<DeviceContext>();
     TransCompute<DeviceContext, T>(ndims, dev_ctx, *x, out, axis);
+    static int regular_counter = 0;
+    std::cout << "** REGULAR TRANSPOSE " << ++regular_counter << std::endl;
   }
 };
 
