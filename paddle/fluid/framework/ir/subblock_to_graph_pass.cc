@@ -24,8 +24,7 @@ void TransformSubblockToProgram(framework::BlockDesc* block_desc,
   *program_desc->add_blocks() = *block_desc->Proto();
 }
 
-std::unique_ptr<ir::Graph> SubblockToGraphPass::ApplyImpl(
-    std::unique_ptr<ir::Graph> graph) const {
+void SubblockToGraphPass::ApplyImpl(ir::Graph* graph) const {
   // Init sub graph
   if (!graph->Has(kSubblockGraphAttr)) {
     graph->Set(kSubblockGraphAttr, new subgraphs_t);
@@ -51,12 +50,9 @@ std::unique_ptr<ir::Graph> SubblockToGraphPass::ApplyImpl(
       // Create a graph
       sub_graphs[node] = std::unique_ptr<Graph>(new Graph(fake_program_desc));
       LOG(INFO) << "get sub-graph size " << sub_graphs[node]->Nodes().size();
-      auto ptr = std::move(sub_graphs[node]);
-      sub_graphs[node] = clean_pass.Apply(std::move(ptr));
+      clean_pass.Apply(sub_graphs[node].get());
     }
   }
-  // Build a graph for the sub-block
-  return graph;
 }
 
 }  // namespace ir

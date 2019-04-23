@@ -18,6 +18,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include "paddle/fluid/framework/ir/graph.h"
 #include "paddle/fluid/framework/ir/graph_helper.h"
 #include "paddle/fluid/framework/ir/graph_pattern_detector.h"
@@ -54,12 +55,14 @@ void BindGraph(py::module *m) {
       "The graph is a Directed Acyclic Single Static Assignment Graph, see "
       "`paddle::ir::Graph` for details.")
       .def(py::init<const ProgramDesc &>())
+      .def("clone", &Graph::Clone)
       .def("has", &Graph::Has)
       .def("get_int", &Graph::Get<int>)
       .def("get_float", &Graph::Get<float>)
       .def("get_double", &Graph::Get<double>)
       .def("get_string", &Graph::Get<std::string>)
-      .def("get_marked_nodes", &Graph::Get<std::unordered_set<const Node *>>)
+      .def("get_marked_nodes", &Graph::Get<std::unordered_set<const Node *>>,
+           return_value_policy::reference)
       .def("set", [](Graph &self, const std::string &attr_name,
                      int attr) { return self.Set(attr_name, new int(attr)); })
       .def("set",
@@ -80,6 +83,12 @@ void BindGraph(py::module *m) {
               const std::unordered_set<const Node *> &attr) {
              return self.Set(attr_name,
                              new std::unordered_set<const Node *>(attr));
+           })
+      .def("set",
+           [](Graph &self, const std::string &attr_name,
+              const std::unordered_set<std::string> &attr) {
+             return self.Set(attr_name,
+                             new std::unordered_set<std::string>(attr));
            })
       .def("erase", &Graph::Erase)
       .def("nodes", &Graph::Nodes, return_value_policy::reference)
@@ -103,7 +112,8 @@ void BindGraph(py::module *m) {
       .def("retrieve_node", &Graph::RetrieveNode,
            return_value_policy::reference)
       .def("resolve_hazard", &Graph::ResolveHazard)
-      .def("origin_program_desc", &Graph::OriginProgram);
+      .def("origin_program_desc", &Graph::OriginProgram,
+           return_value_policy::reference);
 }
 
 void BindNode(py::module *m) {

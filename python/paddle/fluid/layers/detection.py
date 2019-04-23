@@ -49,6 +49,7 @@ __all__ = [
     'box_coder',
     'polygon_box_transform',
     'yolov3_loss',
+    'yolo_box',
     'box_clip',
     'multiclass_nms',
     'distribute_fpn_proposals',
@@ -508,53 +509,62 @@ def polygon_box_transform(input, name=None):
 
 @templatedoc(op_type="yolov3_loss")
 def yolov3_loss(x,
-                gtbox,
-                gtlabel,
+                gt_box,
+                gt_label,
                 anchors,
                 anchor_mask,
                 class_num,
                 ignore_thresh,
                 downsample_ratio,
+                gt_score=None,
+                use_label_smooth=True,
                 name=None):
     """
     ${comment}
 
     Args:
         x (Variable): ${x_comment}
-        gtbox (Variable): groud truth boxes, should be in shape of [N, B, 4],
+        gt_box (Variable): groud truth boxes, should be in shape of [N, B, 4],
                           in the third dimenstion, x, y, w, h should be stored 
                           and x, y, w, h should be relative value of input image.
                           N is the batch number and B is the max box number in 
                           an image.
-        gtlabel (Variable): class id of ground truth boxes, shoud be in shape
+        gt_label (Variable): class id of ground truth boxes, shoud be in shape
                             of [N, B].
         anchors (list|tuple): ${anchors_comment}
         anchor_mask (list|tuple): ${anchor_mask_comment}
         class_num (int): ${class_num_comment}
         ignore_thresh (float): ${ignore_thresh_comment}
         downsample_ratio (int): ${downsample_ratio_comment}
-        name (string): the name of yolov3 loss
+        name (string): the name of yolov3 loss. Default None.
+        gt_score (Variable): mixup score of ground truth boxes, shoud be in shape
+                            of [N, B]. Default None.
+        use_label_smooth (bool): ${use_label_smooth_comment}
 
     Returns:
-        Variable: A 1-D tensor with shape [1], the value of yolov3 loss
+        Variable: A 1-D tensor with shape [N], the value of yolov3 loss
 
     Raises:
         TypeError: Input x of yolov3_loss must be Variable
-        TypeError: Input gtbox of yolov3_loss must be Variable"
-        TypeError: Input gtlabel of yolov3_loss must be Variable"
+        TypeError: Input gtbox of yolov3_loss must be Variable
+        TypeError: Input gtlabel of yolov3_loss must be Variable
+        TypeError: Input gtscore of yolov3_loss must be None or Variable
         TypeError: Attr anchors of yolov3_loss must be list or tuple
         TypeError: Attr class_num of yolov3_loss must be an integer
         TypeError: Attr ignore_thresh of yolov3_loss must be a float number
+        TypeError: Attr use_label_smooth of yolov3_loss must be a bool value
 
     Examples:
       .. code-block:: python
 
           x = fluid.layers.data(name='x', shape=[255, 13, 13], dtype='float32')
-          gtbox = fluid.layers.data(name='gtbox', shape=[6, 5], dtype='float32')
-          gtlabel = fluid.layers.data(name='gtlabel', shape=[6, 1], dtype='int32')
+          gt_box = fluid.layers.data(name='gt_box', shape=[6, 4], dtype='float32')
+          gt_label = fluid.layers.data(name='gt_label', shape=[6], dtype='int32')
+          gt_score = fluid.layers.data(name='gt_score', shape=[6], dtype='float32')
           anchors = [10, 13, 16, 30, 33, 23, 30, 61, 62, 45, 59, 119, 116, 90, 156, 198, 373, 326]
           anchor_mask = [0, 1, 2]
-          loss = fluid.layers.yolov3_loss(x=x, gtbox=gtbox, gtlabel=gtlabel, anchors=anchors, 
+          loss = fluid.layers.yolov3_loss(x=x, gt_box=gt_box, gt_label=gt_label,
+                                          gt_score=gt_score, anchors=anchors, 
                                           anchor_mask=anchor_mask, class_num=80,
                                           ignore_thresh=0.7, downsample_ratio=32)
     """
@@ -562,10 +572,12 @@ def yolov3_loss(x,
 
     if not isinstance(x, Variable):
         raise TypeError("Input x of yolov3_loss must be Variable")
-    if not isinstance(gtbox, Variable):
+    if not isinstance(gt_box, Variable):
         raise TypeError("Input gtbox of yolov3_loss must be Variable")
-    if not isinstance(gtlabel, Variable):
+    if not isinstance(gt_label, Variable):
         raise TypeError("Input gtlabel of yolov3_loss must be Variable")
+    if gt_score is not None and not isinstance(gt_score, Variable):
+        raise TypeError("Input gtscore of yolov3_loss must be Variable")
     if not isinstance(anchors, list) and not isinstance(anchors, tuple):
         raise TypeError("Attr anchors of yolov3_loss must be list or tuple")
     if not isinstance(anchor_mask, list) and not isinstance(anchor_mask, tuple):
@@ -575,6 +587,9 @@ def yolov3_loss(x,
     if not isinstance(ignore_thresh, float):
         raise TypeError(
             "Attr ignore_thresh of yolov3_loss must be a float number")
+    if not isinstance(use_label_smooth, bool):
+        raise TypeError(
+            "Attr use_label_smooth of yolov3_loss must be a bool value")
 
     if name is None:
         loss = helper.create_variable_for_type_inference(dtype=x.dtype)
@@ -585,21 +600,26 @@ def yolov3_loss(x,
     objectness_mask = helper.create_variable_for_type_inference(dtype='int32')
     gt_match_mask = helper.create_variable_for_type_inference(dtype='int32')
 
+    inputs = {
+        "X": x,
+        "GTBox": gt_box,
+        "GTLabel": gt_label,
+    }
+    if gt_score:
+        inputs["GTScore"] = gt_score
+
     attrs = {
         "anchors": anchors,
         "anchor_mask": anchor_mask,
         "class_num": class_num,
         "ignore_thresh": ignore_thresh,
         "downsample_ratio": downsample_ratio,
+        "use_label_smooth": use_label_smooth,
     }
 
     helper.append_op(
         type='yolov3_loss',
-        inputs={
-            "X": x,
-            "GTBox": gtbox,
-            "GTLabel": gtlabel,
-        },
+        inputs=inputs,
         outputs={
             'Loss': loss,
             'ObjectnessMask': objectness_mask,
@@ -607,6 +627,83 @@ def yolov3_loss(x,
         },
         attrs=attrs)
     return loss
+
+
+@templatedoc(op_type="yolo_box")
+def yolo_box(x,
+             img_size,
+             anchors,
+             class_num,
+             conf_thresh,
+             downsample_ratio,
+             name=None):
+    """
+    ${comment}
+
+    Args:
+        x (Variable): ${x_comment}
+        img_size (Variable): ${img_size_comment}
+        anchors (list|tuple): ${anchors_comment}
+        class_num (int): ${class_num_comment}
+        conf_thresh (float): ${conf_thresh_comment}
+        downsample_ratio (int): ${downsample_ratio_comment}
+        name (string): the name of yolo box layer. Default None.
+
+    Returns:
+        Variable: A 3-D tensor with shape [N, M, 4], the coordinates of boxes,
+        and a 3-D tensor with shape [N, M, :attr:`class_num`], the classification 
+        scores of boxes.
+
+    Raises:
+        TypeError: Input x of yolov_box must be Variable
+        TypeError: Attr anchors of yolo box must be list or tuple
+        TypeError: Attr class_num of yolo box must be an integer
+        TypeError: Attr conf_thresh of yolo box must be a float number
+
+    Examples:
+
+    .. code-block:: python
+
+        x = fluid.layers.data(name='x', shape=[255, 13, 13], dtype='float32')
+        anchors = [10, 13, 16, 30, 33, 23]
+        loss = fluid.layers.yolo_box(x=x, class_num=80, anchors=anchors, 
+                                        conf_thresh=0.01, downsample_ratio=32)
+    """
+    helper = LayerHelper('yolo_box', **locals())
+
+    if not isinstance(x, Variable):
+        raise TypeError("Input x of yolo_box must be Variable")
+    if not isinstance(img_size, Variable):
+        raise TypeError("Input img_size of yolo_box must be Variable")
+    if not isinstance(anchors, list) and not isinstance(anchors, tuple):
+        raise TypeError("Attr anchors of yolo_box must be list or tuple")
+    if not isinstance(class_num, int):
+        raise TypeError("Attr class_num of yolo_box must be an integer")
+    if not isinstance(conf_thresh, float):
+        raise TypeError("Attr ignore_thresh of yolo_box must be a float number")
+
+    boxes = helper.create_variable_for_type_inference(dtype=x.dtype)
+    scores = helper.create_variable_for_type_inference(dtype=x.dtype)
+
+    attrs = {
+        "anchors": anchors,
+        "class_num": class_num,
+        "conf_thresh": conf_thresh,
+        "downsample_ratio": downsample_ratio,
+    }
+
+    helper.append_op(
+        type='yolo_box',
+        inputs={
+            "X": x,
+            "ImgSize": img_size,
+        },
+        outputs={
+            'Boxes': boxes,
+            'Scores': scores,
+        },
+        attrs=attrs)
+    return boxes, scores
 
 
 @templatedoc()
@@ -1445,7 +1542,7 @@ def multi_box_head(inputs,
         .. code-block:: python
 
           mbox_locs, mbox_confs, box, var = fluid.layers.multi_box_head(
-            inputs=[conv1, conv2, conv3, conv4, conv5, conv5],
+            inputs=[conv1, conv2, conv3, conv4, conv5, conv6],
             image=images,
             num_classes=21,
             min_ratio=20,

@@ -12,10 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License. */
 
+#include "paddle/fluid/framework/ir/graph_viz_pass.h"
 #include <algorithm>
+#include <unordered_map>
 #include <unordered_set>
 
-#include "paddle/fluid/framework/ir/graph_viz_pass.h"
 #include "paddle/fluid/framework/ir/subblock_to_graph_pass.h"
 #include "paddle/fluid/framework/op_proto_maker.h"
 #include "paddle/fluid/inference/analysis/dot.h"
@@ -39,8 +40,7 @@ std::string FormatName(const Node* node) {
 }
 }  // namespace
 
-std::unique_ptr<ir::Graph> GraphVizPass::ApplyImpl(
-    std::unique_ptr<ir::Graph> graph) const {
+void GraphVizPass::ApplyImpl(ir::Graph* graph) const {
   const std::string graph_viz_path = Get<std::string>(kGraphVizPath);
   VLOG(3) << "draw IR graph viz to " << graph_viz_path;
   std::unique_ptr<std::ostream> fout(new std::ofstream(graph_viz_path));
@@ -48,12 +48,10 @@ std::unique_ptr<ir::Graph> GraphVizPass::ApplyImpl(
   std::ostream& sout = *fout;
 
   Dot dot;
-  auto marked_nodes = ConsumeMarkedNodes(graph.get());
+  auto marked_nodes = ConsumeMarkedNodes(graph);
   DotDrawGraph(*graph, &dot, 0, marked_nodes);
 
   sout << dot.Build();
-
-  return graph;
 }
 
 using subgraphs_t = SubblockToGraphPass::subgraphs_t;

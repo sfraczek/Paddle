@@ -25,7 +25,7 @@ const char kSubblockGraphAttr[] = "__sub_block_grpah__";
 class SubblockToGraphPass : public Pass {
  public:
   using subgraphs_t = std::unordered_map<const Node*, std::unique_ptr<Graph>>;
-  std::unique_ptr<ir::Graph> ApplyImpl(std::unique_ptr<ir::Graph> graph) const;
+  void ApplyImpl(ir::Graph* graph) const;
 };
 
 }  // namespace ir
