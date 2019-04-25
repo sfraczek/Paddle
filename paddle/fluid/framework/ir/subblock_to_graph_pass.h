@@ -20,7 +20,7 @@ namespace framework {
 namespace ir {
 
 // sub-block graph as an attribute in the graph.
-const char kSubblockGraphAttr[] = "__sub_block_grpah__";
+const char kSubblockGraphAttr[] = "__sub_block_graph__";
 
 class SubblockToGraphPass : public Pass {
  public:
