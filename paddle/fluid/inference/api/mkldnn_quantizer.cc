@@ -66,6 +66,8 @@ bool AnalysisPredictor::MkldnnQuantizer::CalculateScales() {
               // output of conv2d with relu must be unsigned
               is_unsigned = op->HasAttr("fuse_relu") &&
                             boost::get<bool>(op->GetAttr("fuse_relu"));
+            } else if (is_output && op->Type() == "relu") {
+              is_unsigned = true;
             } else if (is_output &&
                        (op->Type() == "pool2d" || op->Type() == "transpose2" ||
                         op->Type() == "reshape2")) {

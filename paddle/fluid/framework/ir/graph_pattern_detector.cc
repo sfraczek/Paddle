@@ -1225,6 +1225,21 @@ PDNode *patterns::Concat::operator()() {
   return output_var;
 }
 
+PDNode *patterns::ReLU::operator()() {
+  auto relu_op = pattern->NewNode(relu_op_repr())->assert_is_op("relu");
+
+  auto input_var = pattern->NewNode(relu_in_repr())
+                       ->AsInput()
+                       ->assert_is_op_input("relu", "X");
+
+  auto output_var = pattern->NewNode(relu_out_repr())
+                        ->AsOutput()
+                        ->assert_is_op_output("relu", "Out");
+
+  relu_op->LinksFrom({input_var}).LinksTo({output_var});
+  return output_var;
+}
+
 std::unordered_set<std::string> conv_act_set({"identity", "relu"});
 
 PDNode *patterns::ConvElementwiseaddAct::operator()(PDNode *conv_in) {

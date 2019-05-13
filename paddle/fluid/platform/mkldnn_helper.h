@@ -89,6 +89,16 @@ inline mkldnn::memory::data_type MKLDNNGetDataType<float>() {
   return mkldnn::memory::f32;
 }
 
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<int8_t>() {
+  return mkldnn::memory::s8;
+}
+
+template <>
+inline mkldnn::memory::data_type MKLDNNGetDataType<uint8_t>() {
+  return mkldnn::memory::u8;
+}
+
 inline void Reorder(const mkldnn::memory& src, const mkldnn::memory& dst) {
   auto reorder_prim = mkldnn::reorder(src, dst);
   std::vector<mkldnn::primitive> pipeline;

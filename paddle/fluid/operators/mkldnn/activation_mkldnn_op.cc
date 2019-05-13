@@ -349,3 +349,15 @@ namespace ops = paddle::operators;
   __macro(abs, AbsMKLDNNFunctor, AbsMKLDNNGradFunctor);
 
 FOR_EACH_MKLDNN_KERNEL_FUNCTOR(REGISTER_ACTIVATION_MKLDNN_KERNEL);
+
+REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(
+    relu, MKLDNN, ::paddle::platform::CPUPlace, U8, ops::kReLUMKLDNNINT8,
+    ops::MKLDNNActivationKernel<ops::ReluMKLDNNFunctor<uint8_t>>);
+
+REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(
+    relu, MKLDNN, ::paddle::platform::CPUPlace, S8, ops::kReLUMKLDNNINT8,
+    ops::MKLDNNActivationKernel<ops::ReluMKLDNNFunctor<int8_t>>);
+
+REGISTER_OP_KERNEL_WITH_CUSTOM_TYPE(
+    relu, MKLDNN, ::paddle::platform::CPUPlace, FP32, ops::kReLUMKLDNNFP32,
+    ops::MKLDNNActivationKernel<ops::ReluMKLDNNFunctor<float>>);

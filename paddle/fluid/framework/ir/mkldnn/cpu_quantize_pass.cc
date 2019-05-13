@@ -440,6 +440,47 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
   PrettyLogDetail("---    quantized %d concat ops", quantize_concat_count);
 }
 
+void CPUQuantizePass::QuantizeReLU(Graph* graph) const {
+  GraphPatternDetector gpd;
+  auto pattern = gpd.mutable_pattern();
+  patterns::ReLU relu_pattern{pattern, name_scope_};
+  relu_pattern();
+
+  int quantize_relu_count = 0;
+  auto handler = [&](const GraphPatternDetector::subgraph_t& subgraph,
+                     Graph* g) {
+    VLOG(4) << "Quantize relu op";
+    GET_IR_NODE_FROM_SUBGRAPH(relu_op, relu_op, relu_pattern);
+    auto* relu_op_desc = relu_op->Op();
+
+    // skip if should not be quantized
+    if (!relu_op_desc->HasAttr("use_quantizer") ||
+        !boost::get<bool>(relu_op_desc->GetAttr("use_quantizer")))
+      return;
+
+    GET_IR_NODE_FROM_SUBGRAPH(relu_in, relu_in, relu_pattern);
+    GET_IR_NODE_FROM_SUBGRAPH(relu_out, relu_out, relu_pattern);
+
+    // get scales calculated after warmup, they scale variables to MAX=1.0
+    auto scales = Get<VarQuantScale>("quant_var_scales");
+
+    auto input_scale = scales[relu_in->Name()].second.data<double>()[0];
+    auto output_scale = scales[relu_out->Name()].second.data<double>()[0];
+    bool is_input_unsigned = scales[relu_in->Name()].first;
+
+    QuantizeInput(g, relu_op, relu_in, "X", input_scale, is_input_unsigned);
+    DequantizeOutput(g, relu_op, relu_out, "Out", output_scale,
+                     true /*relu outputs are unsigned*/);
+
+    ++quantize_relu_count;
+  };
+
+  gpd(graph, handler);
+  AddStatis(quantize_relu_count);
+
+  PrettyLogDetail("---    quantized %d relu ops", quantize_relu_count);
+}
+
 void CPUQuantizePass::ApplyImpl(ir::Graph* graph) const {
   VLOG(3) << "Quantizing the graph.";
   PADDLE_ENFORCE(graph);
@@ -454,6 +495,7 @@ void CPUQuantizePass::ApplyImpl(ir::Graph* graph) const {
   QuantizePriorBox(graph);
   QuantizeReshape2(graph);
   QuantizeConcat(graph);
+  QuantizeReLU(graph);
 }
 
 }  // namespace ir

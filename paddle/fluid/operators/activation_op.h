@@ -36,6 +36,9 @@ limitations under the License. */
 namespace paddle {
 namespace operators {
 
+constexpr int kReLUMKLDNNFP32 = 1;
+constexpr int kReLUMKLDNNINT8 = 2;
+
 enum ActBwdOpFwdDeps {
   kNoDeps = 0x00,  // Do not need any forward input/output
   kDepX = 0x01,    // Only need forward input X

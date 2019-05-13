@@ -58,6 +58,11 @@ std::unique_ptr<std::unordered_set<std::string>> GetInplaceOpSet() {
       AddAttr<bool>("use_mkldnn",                                            \
                     "(bool, default false) Only used in mkldnn kernel")      \
           .SetDefault(false);                                                \
+      AddAttr<bool>("use_quantizer",                                         \
+                    "(bool, default false) Set to true for operators that "  \
+                    "should be quantized and use int8 kernel."               \
+                    "Only used on CPU.")                                     \
+          .SetDefault(false);                                                \
       AddAttr<bool>("use_cudnn",                                             \
                     "(bool, default false) Only used in cudnn kernel, need " \
                     "install cudnn")                                         \
@@ -101,6 +106,7 @@ class ActivationGradOpDescMaker : public framework::SingleGradOpDescMaker {
 framework::OpKernelType GetKernelType(const framework::ExecutionContext& ctx,
                                       const framework::OperatorWithKernel& oper,
                                       const std::string& name) {
+  auto input_data_type = framework::GetDataTypeOfVar(ctx.InputVar(name));
   framework::LibraryType library{framework::LibraryType::kPlain};
   framework::DataLayout layout = framework::DataLayout::kAnyLayout;
 // FIXME(liuwei1031) temporarily disable the code to unblock users
@@ -119,11 +125,19 @@ framework::OpKernelType GetKernelType(const framework::ExecutionContext& ctx,
       platform::CanMKLDNNBeUsed(ctx)) {
     library = framework::LibraryType::kMKLDNN;
     layout = framework::DataLayout::kMKLDNN;
+    if (oper.Type() == "relu") {
+      int customized_type_value =
+          (input_data_type == framework::DataTypeTrait<int8_t>::DataType ||
+           input_data_type == framework::DataTypeTrait<uint8_t>::DataType)
+              ? kReLUMKLDNNINT8
+              : kReLUMKLDNNFP32;
+      return framework::OpKernelType(input_data_type, ctx.GetPlace(), layout,
+                                     library, customized_type_value);
+    }
   }
 #endif
-  return framework::OpKernelType(
-      framework::GetDataTypeOfVar(ctx.InputVar(name)), ctx.GetPlace(), layout,
-      library);
+  return framework::OpKernelType(input_data_type, ctx.GetPlace(), layout,
+                                 library);
 }
 
 class ActivationOp : public framework::OperatorWithKernel {
