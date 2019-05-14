@@ -495,7 +495,7 @@ void CPUQuantizePass::ApplyImpl(ir::Graph* graph) const {
   QuantizePriorBox(graph);
   QuantizeReshape2(graph);
   QuantizeConcat(graph);
-  QuantizeReLU(graph);
+  // QuantizeReLU(graph);
 }
 
 }  // namespace ir

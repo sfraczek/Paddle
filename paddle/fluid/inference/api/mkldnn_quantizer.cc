@@ -70,11 +70,13 @@ bool AnalysisPredictor::MkldnnQuantizer::CalculateScales() {
               is_unsigned = true;
             } else if (is_output &&
                        (op->Type() == "pool2d" || op->Type() == "transpose2" ||
-                        op->Type() == "reshape2")) {
-              // output of pool2d with unsigned input must be unsigned
-              auto input_var_name = op->Input("X")[0];
-              if (scales_.find(input_var_name) != scales_.end()) {
-                is_unsigned = scales_[input_var_name].first;
+                        op->Type() == "reshape2" || op->Type() == "concat")) {
+              // output of ops with unsigned input must be unsigned
+              is_unsigned = true;
+              for (auto input_var_name : op->Input("X")) {
+                if (scales_.find(input_var_name) != scales_.end()) {
+                  is_unsigned = is_unsigned && scales_[input_var_name].first;
+                }
               }
             }
 

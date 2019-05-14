@@ -166,6 +166,9 @@ class ConcatMKLDNNOpKernel : public paddle::framework::OpKernel<T> {
         ctx.template device_context<paddle::platform::MKLDNNDeviceContext>();
     auto place = GetCpuPlace(ctx);
 
+    for (size_t i = 1; i < multi_input.size(); i++) {
+      PADDLE_ENFORCE_EQ(multi_input[i - 1]->type(), multi_input[i]->type());
+    }
     memory::data_type dt =
         paddle::framework::ToMKLDNNDataType(multi_input[0]->type());
 

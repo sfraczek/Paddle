@@ -1240,34 +1240,40 @@ PDNode *patterns::ReLU::operator()() {
   return output_var;
 }
 
+PDNode *patterns::ConcatReLU::operator()() {
+  auto concat_op = pattern->NewNode(concat_op_repr())->assert_is_op("concat");
+  auto relu_op = pattern->NewNode(relu_op_repr())->assert_is_op("relu");
+
+  auto concat_out =
+      pattern->NewNode(concat_out_repr())->assert_is_op_output("concat", "Out");
+
+  auto relu_out = pattern->NewNode(relu_out_repr())
+                      ->AsOutput()
+                      ->assert_is_op_output("relu", "Out");
+
+  concat_op->LinksTo({concat_out});
+  relu_op->LinksFrom({concat_out}).LinksTo({relu_out});
+
+  return relu_out;
+}
+
 PDNode *patterns::ConvConcatReLU::operator()() {
   auto conv_op = pattern->NewNode(conv_op_repr())->assert_is_op("conv2d");
   auto concat_op = pattern->NewNode(concat_op_repr())->assert_is_op("concat");
   auto relu_op = pattern->NewNode(relu_op_repr())->assert_is_op("relu");
 
-  auto conv_input = pattern->NewNode(conv_input_repr())
-                        ->AsInput()
-                        ->assert_is_op_input("conv2d", "Input");
-
-  auto conv_filter = pattern->NewNode(conv_filter_repr())
-                         ->AsInput()
-                         ->assert_is_op_input("conv2d", "Filter");
-
   auto conv_out = pattern->NewNode(conv_out_repr())
-                      ->assert_is_op_output("conv2d", "Output")
-                      ->AsIntermediate()
-                      ->assert_is_op_input("concat", "X");
+                      ->assert_is_op_output("conv2d", "Output");
 
   auto concat_out = pattern->NewNode(concat_out_repr())
                         ->assert_is_op_output("concat", "Out")
-                        ->AsIntermediate()
                         ->assert_is_op_input("relu", "X");
 
   auto relu_out = pattern->NewNode(relu_out_repr())
                       ->AsOutput()
                       ->assert_is_op_output("relu", "Out");
 
-  conv_op->LinksFrom({conv_input, conv_filter}).LinksTo({conv_out});
+  conv_op->LinksTo({conv_out});
   concat_op->LinksFrom({conv_out}).LinksTo({concat_out});
   relu_op->LinksFrom({concat_out}).LinksTo({relu_out});
 
