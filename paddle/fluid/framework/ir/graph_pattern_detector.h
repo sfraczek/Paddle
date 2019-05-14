@@ -782,6 +782,26 @@ struct ReLU : public PatternBase {
   PATTERN_DECL_NODE(relu_out);
 };
 
+// Conv + Concat + ReLU
+// named nodes:
+// conv_input, conv_filter, conv_op, conv_out
+// concat_op, concat_out, relu_op, relu_out
+struct ConvConcatReLU : public PatternBase {
+  ConvConcatReLU(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "conv_concat_relu") {}
+
+  PDNode* operator()();
+
+  PATTERN_DECL_NODE(conv_input);
+  PATTERN_DECL_NODE(conv_filter);
+  PATTERN_DECL_NODE(conv_op);
+  PATTERN_DECL_NODE(conv_out);
+  PATTERN_DECL_NODE(concat_op);
+  PATTERN_DECL_NODE(concat_out);
+  PATTERN_DECL_NODE(relu_op);
+  PATTERN_DECL_NODE(relu_out);
+};
+
 // Conv + ElementwiseAdd + an activation
 // This pattern can futher fuse the conv related ops after the conv+bn fusion.
 struct ConvElementwiseaddAct : public PatternBase {
