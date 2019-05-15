@@ -64,7 +64,7 @@ class CPUQuantizePass : public FusePassBase {
 
   // quantize all inputs of given name with the same (minimum) scale
   void QuantizeInputs(Graph* g, Node* op, std::string input_name,
-                      VarQuantScale* scales, bool* are_unsigned,
+                      VarQuantScale* scales, bool are_unsigned,
                       std::string scale_attr_name = "") const;
 
   void DequantizeOutput(Graph* g, Node* op, Node* output,

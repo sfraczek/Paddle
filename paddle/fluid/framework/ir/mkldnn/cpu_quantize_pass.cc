@@ -76,7 +76,7 @@ void CPUQuantizePass::QuantizeInput(Graph* g, Node* op, Node* input,
 }
 
 void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op, std::string input_name,
-                                     VarQuantScale* scales, bool* are_unsigned,
+                                     VarQuantScale* scales, bool are_unsigned,
                                      std::string scale_attr_name) const {
   auto inputs = op->inputs;
   PADDLE_ENFORCE_GE(inputs.size(), 1);
@@ -88,16 +88,12 @@ void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op, std::string input_name,
   std::vector<Node*> quantize_out_nodes(inputs.size());
   std::vector<std::string> quantize_out_node_names(inputs.size());
 
-  // treat all inputs as unsigned iff all the inputs are unsigned
-  *are_unsigned = true;
   double scale_min = std::numeric_limits<double>::max();
   for (const auto& input : inputs) {
     double scale = (*scales)[input->Name()].second.data<double>()[0];
     if (scale < scale_min) scale_min = scale;
-    bool is_unsigned = (*scales)[input->Name()].first;
-    *are_unsigned = *are_unsigned && is_unsigned;
   }
-  unsigned max = *are_unsigned ? U8_MAX : S8_MAX;
+  unsigned max = are_unsigned ? U8_MAX : S8_MAX;
   float scale = scale_min * max;
 
   for (size_t i = 0; i < inputs.size(); i++) {
@@ -110,7 +106,7 @@ void CPUQuantizePass::QuantizeInputs(Graph* g, Node* op, std::string input_name,
     q_desc.SetInput("Input", std::vector<std::string>({inputs[i]->Name()}));
     q_desc.SetOutput("Output",
                      std::vector<std::string>({quantize_out_node_names[i]}));
-    q_desc.SetAttr("is_negative_input", !*are_unsigned);
+    q_desc.SetAttr("is_negative_input", !are_unsigned);
     auto quantize_op = g->CreateOpNode(&q_desc);  // OpDesc will be copied.
 
     // link quantize op
@@ -419,8 +415,8 @@ void CPUQuantizePass::QuantizeConcat(Graph* graph) const {
     // get scales calculated after warmup, they scale variables to MAX=1.0
     auto scales = Get<VarQuantScale>("quant_var_scales");
 
-    bool are_all_inputs_unsigned = false;
-    QuantizeInputs(g, concat_op, "X", &scales, &are_all_inputs_unsigned);
+    bool are_all_inputs_unsigned = scales[concat_out->Name()].first;
+    QuantizeInputs(g, concat_op, "X", &scales, are_all_inputs_unsigned);
 
     auto output_scale = scales[concat_out->Name()].second.data<double>()[0];
 
