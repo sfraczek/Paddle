@@ -71,6 +71,10 @@ namespace ir {
  */
 class Graph {
  public:
+  explicit Graph(const BlockDesc &block);
+  std::map<std::string, std::vector<ir::Node *>> InitFromBlock(
+      const BlockDesc &block);
+
   explicit Graph(const ProgramDesc &program);
 
   virtual ~Graph() {

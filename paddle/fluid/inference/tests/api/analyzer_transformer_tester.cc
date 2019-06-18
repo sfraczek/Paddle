@@ -166,6 +166,7 @@ void SetConfig(AnalysisConfig *cfg) {
   cfg->SwitchSpecifyInputNames();
   cfg->SwitchIrOptim();
   cfg->SetCpuMathLibraryNumThreads(FLAGS_paddle_num_threads);
+  // cfg->SetMKLDNNOp({"concat","softmax","transpose"});
 }
 
 void SetInput(std::vector<std::vector<PaddleTensor>> *inputs) {

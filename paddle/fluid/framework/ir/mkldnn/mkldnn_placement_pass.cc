@@ -32,7 +32,6 @@ void MKLDNNPlacementPass::SetUseMKLDNN(OpDesc* op) const {
                          op->Type()) != op_types_list.end()) {
       op->SetAttr("use_mkldnn", true);
     }
-    PADDLE_ENFORCE_EQ(boost::get<bool>(op->GetAttr("use_mkldnn")), true);
   }
 }
 
