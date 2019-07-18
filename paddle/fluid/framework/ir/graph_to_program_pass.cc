@@ -62,73 +62,35 @@ void GraphToProgramPass::ApplyImpl(ir::Graph* graph) const {
   std::unique_ptr<proto::ProgramDesc> program_pb(
       new proto::ProgramDesc(*program.Proto()));
 
-  {
-    auto block = program_pb->mutable_blocks(kRootBlockIndex);
-    block->set_idx(kRootBlockIndex);
-    block->clear_vars();
-    std::unordered_set<std::string> visited_vars;
-    for (ir::Node* n : graph->Nodes()) {
-      if (n->IsVar()) {
-        if (n->Var() && visited_vars.count(n->Var()->Name()) == 0 &&
-            !vars2remove.count(n->Var()->Name())) {
-          visited_vars.insert(n->Var()->Name());
-          block->add_vars()->MergeFrom(*n->Var()->Proto());
-        }
+  auto block = program_pb->mutable_blocks(kRootBlockIndex);
+  block->set_idx(kRootBlockIndex);
+  block->clear_vars();
+  std::unordered_set<std::string> visited_vars;
+  for (ir::Node* n : graph->Nodes()) {
+    if (n->IsVar()) {
+      if (n->Var() && visited_vars.count(n->Var()->Name()) == 0 &&
+          !vars2remove.count(n->Var()->Name())) {
+        visited_vars.insert(n->Var()->Name());
+        block->add_vars()->MergeFrom(*n->Var()->Proto());
       }
-    }
-    block->clear_ops();
-
-    std::vector<ir::Node*> nodes;
-    if (Has(kGraphToProgramSortKind)) {
-      // Inference Memory Optimize relays on this branch.
-      int sort_kind = Get<int>(kGraphToProgramSortKind);
-      nodes = TopologyVarientSort(
-          *graph, static_cast<framework::ir::SortKind>(sort_kind));
-    } else {
-      nodes = TopologySortOperations(*graph);
-    }
-
-    for (ir::Node* n : nodes) {
-      if (!n->Op()) continue;
-
-      block->add_ops()->MergeFrom(*n->Op()->Proto());
     }
   }
+  block->clear_ops();
 
-  {
-    auto* block = program_pb->mutable_blocks(1);
-    // This block acquired from program is not synchronized with latest
-    // program_pb, so the graph will be old and it won't work
-    Graph graph2(*program.MutableBlock(1));
-    block->set_idx(1);
-    block->clear_vars();
-    std::unordered_set<std::string> visited_vars;
-    for (ir::Node* n : graph2.Nodes()) {
-      if (n->IsVar()) {
-        if (n->Var() && visited_vars.count(n->Var()->Name()) == 0 &&
-            !vars2remove.count(n->Var()->Name())) {
-          visited_vars.insert(n->Var()->Name());
-          block->add_vars()->MergeFrom(*n->Var()->Proto());
-        }
-      }
-    }
-    block->clear_ops();
+  std::vector<ir::Node*> nodes;
+  if (Has(kGraphToProgramSortKind)) {
+    // Inference Memory Optimize relays on this branch.
+    int sort_kind = Get<int>(kGraphToProgramSortKind);
+    nodes = TopologyVarientSort(
+        *graph, static_cast<framework::ir::SortKind>(sort_kind));
+  } else {
+    nodes = TopologySortOperations(*graph);
+  }
 
-    std::vector<ir::Node*> nodes;
-    if (Has(kGraphToProgramSortKind)) {
-      // Inference Memory Optimize relays on this branch.
-      int sort_kind = Get<int>(kGraphToProgramSortKind);
-      nodes = TopologyVarientSort(
-          graph2, static_cast<framework::ir::SortKind>(sort_kind));
-    } else {
-      nodes = TopologySortOperations(graph2);
-    }
+  for (ir::Node* n : nodes) {
+    if (!n->Op()) continue;
 
-    for (ir::Node* n : nodes) {
-      if (!n->Op()) continue;
-
-      block->add_ops()->MergeFrom(*n->Op()->Proto());
-    }
+    block->add_ops()->MergeFrom(*n->Op()->Proto());
   }
 
   // save_block_ops_use_mkldnn_info("block_before_copyfrom.txt", program);
