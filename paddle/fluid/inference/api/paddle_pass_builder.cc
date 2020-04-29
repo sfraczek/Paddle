@@ -196,7 +196,6 @@ void CpuPassStrategy::EnableMKLDNN() {
              "conv_relu6_mkldnn_fuse_pass",                //
              "conv_swish_mkldnn_fuse_pass",                //
              "scale_matmul_fuse_pass",                     //
-             "reshape_transpose_matmul_mkldnn_fuse_pass",  //
              "matmul_transpose_reshape_fuse_pass",         //
              // Disabled due to topology-dependent speed-up
              // "fc_mkldnn_pass",
