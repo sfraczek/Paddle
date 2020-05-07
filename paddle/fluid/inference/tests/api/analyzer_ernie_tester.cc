@@ -143,6 +143,7 @@ void SetConfig(AnalysisConfig *cfg, bool use_mkldnn = false,
   }
   cfg->SwitchSpecifyInputNames();
   cfg->SwitchIrOptim();
+  cfg->SwitchIrDebug();
   cfg->SetCpuMathLibraryNumThreads(FLAGS_paddle_num_threads);
 }
 

@@ -140,7 +140,7 @@ if (NOT WIN32)
 set(COMMON_FLAGS
     -fPIC
     -fno-omit-frame-pointer
-    -Werror
+    #-Werror
     -Wall
     -Wextra
     -Wnon-virtual-dtor
@@ -180,6 +180,7 @@ set(GPU_COMMON_FLAGS
     -fno-omit-frame-pointer
     -Wnon-virtual-dtor
     -Wdelete-non-virtual-dtor
+    -Wno-ignored-attributes
     -Wno-unused-parameter
     -Wno-unused-function
     -Wno-error=literal-suffix
@@ -203,7 +204,7 @@ if(LINUX)
     set(GPU_COMMON_FLAGS
         -Wall
         -Wextra
-        -Werror
+#        -Werror
         ${GPU_COMMON_FLAGS})
 endif(LINUX)
 
