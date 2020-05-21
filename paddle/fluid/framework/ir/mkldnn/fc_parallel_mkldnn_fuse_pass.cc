@@ -134,7 +134,7 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
       return;
     }
 
-    int scale_in;
+    float scale_in;
     if (!GetAttrFromThreeOps("Scale_in", fc1, fc2, fc3, &scale_in)) {
       return;
     }
