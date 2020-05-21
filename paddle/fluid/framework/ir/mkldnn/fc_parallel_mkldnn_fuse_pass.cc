@@ -47,24 +47,6 @@ bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
   return true;
 }
 
-template <typename... Types>
-bool CopyAllAttrsIfConsistent(std::initializer_list<std::string> attr_names,
-                              const ir::Node* op1, const ir::Node* op2,
-                              const ir::Node* op3, OpDesc* fc_new_desc) {
-  // static_assert(
-  //     std::tuple_size<Types...>::value == attr_names.size(),
-  //     "Number of attribute names doesn't equal number of template types");
-  // CopyAttrIfConsistent<Types...>(attr_names..., op1, op2, op3, &attr);
-  std::initializer_list<std::pair<std::string,Types>>... t;
-  // for (int i = 0; i < t.size(); ++i) {
-  //   CopyAttrIfConsistent<type(t[i])>(attr_names[i], op1, op2, op3,
-  //                                    &fc_new_desc);
-  // }
-    // bool dummy[sizeof...(Types)] = {(CopyAttrIfConsistent<Types>(
-    //     attr_names, op1, op2, op3, &fc_new_desc))...};
-  return true;
-}
-
 void ConcatWeights(const LoDTensor& w1, const LoDTensor& w2,
                    const LoDTensor& w3, LoDTensor* fc_new_weights_tensor,
                    bool padding_weights) {
@@ -161,30 +143,22 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     OpDesc fc_new_desc;
     fc_new_desc.SetType("fc");
 
-    // if (!CopyAttrIfConsistent<int>("in_num_col_dims", fc1, fc2, fc3,
-    //                                &fc_new_desc))
-    //   return;
+    if (!CopyAttrIfConsistent<int>("in_num_col_dims", fc1, fc2, fc3,
+                                   &fc_new_desc))
+      return;
 
-    // if (!CopyAttrIfConsistent<float>("Scale_in", fc1, fc2, fc3,
-    // &fc_new_desc))
-    //   return;
+    if (!CopyAttrIfConsistent<float>("Scale_in", fc1, fc2, fc3, &fc_new_desc))
+      return;
 
-    // if (!CopyAttrIfConsistent<float>("Scale_out", fc1, fc2, fc3,
-    // &fc_new_desc))
-    //   return;
+    if (!CopyAttrIfConsistent<float>("Scale_out", fc1, fc2, fc3, &fc_new_desc))
+      return;
 
-    // if (!CopyAttrIfConsistent<std::string>("activation_type", fc1, fc2, fc3,
-    //                                        &fc_new_desc))
-    //   return;
+    if (!CopyAttrIfConsistent<std::string>("activation_type", fc1, fc2, fc3,
+                                           &fc_new_desc))
+      return;
 
-    // if (!CopyAttrIfConsistent<std::string>("use_mkldnn", fc1, fc2, fc3,
-    //                                        &fc_new_desc))
-    //   return;
-
-    if (!CopyAllAttrsIfConsistent<int, float, float, std::string, std::string>(
-            {"in_num_col_dims", "Scale_in", "Scale_out", "activation_type",
-             "use_mkldnn"},
-            fc1, fc2, fc3, &fc_new_desc))
+    if (!CopyAttrIfConsistent<bool>("use_mkldnn", fc1, fc2, fc3,
+                                           &fc_new_desc))
       return;
 
     bool padding_weights;
