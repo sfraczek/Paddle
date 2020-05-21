@@ -139,6 +139,11 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
       return;
     }
 
+    float scale_out;
+    if (!GetAttrFromThreeOps("Scale_out", fc1, fc2, fc3, &scale_out)) {
+      return;
+    }
+
     std::string activation_type;
     if (!GetAttrFromThreeOps("activation_type", fc1, fc2, fc3,
                              &activation_type)) {
@@ -233,6 +238,7 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     fc_new_desc.SetAttr("in_num_col_dims", in_num_col_dims);
     fc_new_desc.SetAttr("padding_weights", false);  // padding_weights);
     fc_new_desc.SetAttr("Scale_in", scale_in);
+    fc_new_desc.SetAttr("Scale_out", scale_out);
     ir::Node* fc_new = graph->CreateOpNode(&fc_new_desc);
 
     GraphSafeRemoveNodes(
