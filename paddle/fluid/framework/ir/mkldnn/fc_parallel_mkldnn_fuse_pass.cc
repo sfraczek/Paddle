@@ -35,6 +35,36 @@ bool GetAttrFromThreeOps(std::string attr_name, const ir::Node* op1,
   return true;
 }
 
+template <typename T>
+bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
+                          const ir::Node* op2, const ir::Node* op3,
+                          OpDesc* fc_new_desc) {
+  T attr;
+  if (!GetAttrFromThreeOps(attr_name, op1, op2, op3, &attr)) {
+    return false;
+  }
+  fc_new_desc->SetAttr(attr_name, attr);
+  return true;
+}
+
+template <typename... Types>
+bool CopyAllAttrsIfConsistent(std::initializer_list<std::string> attr_names,
+                              const ir::Node* op1, const ir::Node* op2,
+                              const ir::Node* op3, OpDesc* fc_new_desc) {
+  // static_assert(
+  //     std::tuple_size<Types...>::value == attr_names.size(),
+  //     "Number of attribute names doesn't equal number of template types");
+  // CopyAttrIfConsistent<Types...>(attr_names..., op1, op2, op3, &attr);
+  std::initializer_list<std::pair<std::string,Types>>... t;
+  // for (int i = 0; i < t.size(); ++i) {
+  //   CopyAttrIfConsistent<type(t[i])>(attr_names[i], op1, op2, op3,
+  //                                    &fc_new_desc);
+  // }
+    // bool dummy[sizeof...(Types)] = {(CopyAttrIfConsistent<Types>(
+    //     attr_names, op1, op2, op3, &fc_new_desc))...};
+  return true;
+}
+
 void ConcatWeights(const LoDTensor& w1, const LoDTensor& w2,
                    const LoDTensor& w3, LoDTensor* fc_new_weights_tensor,
                    bool padding_weights) {
@@ -45,8 +75,8 @@ void ConcatWeights(const LoDTensor& w1, const LoDTensor& w2,
     auto width = w1.dims()[1] - 4;
     auto stride = w1.dims()[1];
     for (int row = 0; row < fc_new_weights_tensor->dims()[0]; ++row) {
-      memcpy(new_data + 0 + row * new_width,
-             w1.data<float>() + row * stride, width * sizeof(float));
+      memcpy(new_data + 0 + row * new_width, w1.data<float>() + row * stride,
+             width * sizeof(float));
       memcpy(new_data + width + row * new_width,
              w2.data<float>() + row * stride, width * sizeof(float));
       memcpy(new_data + 2 * width + row * new_width,
@@ -128,38 +158,41 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     GET_IR_NODE_FROM_SUBGRAPH(fc2_out, fc2_out, fc_parallel_pattern);
     GET_IR_NODE_FROM_SUBGRAPH(fc3_out, fc3_out, fc_parallel_pattern);
 
-    int in_num_col_dims;
-    if (!GetAttrFromThreeOps("in_num_col_dims", fc1, fc2, fc3,
-                             &in_num_col_dims)) {
-      return;
-    }
+    OpDesc fc_new_desc;
+    fc_new_desc.SetType("fc");
 
-    float scale_in;
-    if (!GetAttrFromThreeOps("Scale_in", fc1, fc2, fc3, &scale_in)) {
-      return;
-    }
+    // if (!CopyAttrIfConsistent<int>("in_num_col_dims", fc1, fc2, fc3,
+    //                                &fc_new_desc))
+    //   return;
 
-    float scale_out;
-    if (!GetAttrFromThreeOps("Scale_out", fc1, fc2, fc3, &scale_out)) {
-      return;
-    }
+    // if (!CopyAttrIfConsistent<float>("Scale_in", fc1, fc2, fc3,
+    // &fc_new_desc))
+    //   return;
 
-    std::string activation_type;
-    if (!GetAttrFromThreeOps("activation_type", fc1, fc2, fc3,
-                             &activation_type)) {
+    // if (!CopyAttrIfConsistent<float>("Scale_out", fc1, fc2, fc3,
+    // &fc_new_desc))
+    //   return;
+
+    // if (!CopyAttrIfConsistent<std::string>("activation_type", fc1, fc2, fc3,
+    //                                        &fc_new_desc))
+    //   return;
+
+    // if (!CopyAttrIfConsistent<std::string>("use_mkldnn", fc1, fc2, fc3,
+    //                                        &fc_new_desc))
+    //   return;
+
+    if (!CopyAllAttrsIfConsistent<int, float, float, std::string, std::string>(
+            {"in_num_col_dims", "Scale_in", "Scale_out", "activation_type",
+             "use_mkldnn"},
+            fc1, fc2, fc3, &fc_new_desc))
       return;
-    }
 
     bool padding_weights;
     if (!GetAttrFromThreeOps("padding_weights", fc1, fc2, fc3,
                              &padding_weights)) {
       return;
     }
-
-    bool use_mkldnn;
-    if (!GetAttrFromThreeOps("use_mkldnn", fc1, fc2, fc3, &use_mkldnn)) {
-      return;
-    }
+    fc_new_desc.SetAttr("padding_weights", false);  // padding_weights);
 
     // Get weights tensors
     auto* w1 = scope->FindVar(fc1_w->Name())->GetMutable<LoDTensor>();
@@ -227,18 +260,10 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     split_desc.SetAttr("num", 3);
     auto split_op = graph->CreateOpNode(&split_desc);
 
-    OpDesc fc_new_desc;
     fc_new_desc.SetInput("Input", {fc_in->Name()});
     fc_new_desc.SetInput("W", {fc_new_weights->Name()});
     fc_new_desc.SetInput("Bias", {fc_new_bias->Name()});
     fc_new_desc.SetOutput("Out", {fc_new_out->Name()});
-    fc_new_desc.SetType("fc");
-    fc_new_desc.SetAttr("use_mkldnn", use_mkldnn);
-    fc_new_desc.SetAttr("activation_type", activation_type);
-    fc_new_desc.SetAttr("in_num_col_dims", in_num_col_dims);
-    fc_new_desc.SetAttr("padding_weights", false);  // padding_weights);
-    fc_new_desc.SetAttr("Scale_in", scale_in);
-    fc_new_desc.SetAttr("Scale_out", scale_out);
     ir::Node* fc_new = graph->CreateOpNode(&fc_new_desc);
 
     GraphSafeRemoveNodes(
