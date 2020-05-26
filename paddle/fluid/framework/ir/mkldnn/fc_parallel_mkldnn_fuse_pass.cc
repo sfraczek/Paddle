@@ -17,8 +17,9 @@
 #include <string>
 #include <tuple>
 #include <vector>
-// #include "paddle/fluid/platform/enforce.h"
+
 #include "paddle/fluid/operators/math/cpu_vec.h"
+#include "paddle/fluid/string/pretty_log.h"
 
 namespace paddle {
 namespace framework {
@@ -41,6 +42,8 @@ bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
                           OpDesc* fc_new_desc) {
   T attr;
   if (!GetAttrFromThreeOps(attr_name, op1, op2, op3, &attr)) {
+    string::PrettyLogDetail("%s is not consistent. Not fusing.",
+                            attr_name);
     return false;
   }
   fc_new_desc->SetAttr(attr_name, attr);
@@ -158,16 +161,14 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
                                            &fc_new_desc))
       return;
 
-    if (!CopyAttrIfConsistent<bool>("use_mkldnn", fc1, fc2, fc3,
-                                           &fc_new_desc))
+    if (!CopyAttrIfConsistent<bool>("use_mkldnn", fc1, fc2, fc3, &fc_new_desc))
       return;
 
-    bool padding_weights;
-    if (!GetAttrFromThreeOps("padding_weights", fc1, fc2, fc3,
-                             &padding_weights)) {
+    if (!CopyAttrIfConsistent<bool>("padding_weights", fc1, fc2, fc3,
+                                    &fc_new_desc))
       return;
-    }
-    fc_new_desc.SetAttr("padding_weights", padding_weights);
+    auto padding_weights =
+        boost::get<bool>(fc_new_desc.GetAttr("padding_weights"));
 
     // Get weights tensors
     auto* w1 = scope->FindVar(fc1_w->Name())->GetMutable<LoDTensor>();
@@ -258,8 +259,10 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
   gpd(graph, handler);
   AddStatis(found_fc_parallel_count);
 
-  VLOG(4) << "---    Fused " << found_fc_parallel_count
-          << " FcParallelMkldnn patterns";
+  std::stringstream msg_ss;
+  msg_ss << "---    Fused " << found_fc_parallel_count
+         << " FcParallelMkldnn patterns";
+  string::PrettyLogDetail(msg_ss.str().c_str());
 }
 
 }  // namespace ir
