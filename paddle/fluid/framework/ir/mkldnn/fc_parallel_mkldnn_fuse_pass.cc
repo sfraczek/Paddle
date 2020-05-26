@@ -61,8 +61,9 @@ void ConcatWeights(const LoDTensor& w1, const LoDTensor& w2,
              width * sizeof(float));
       memcpy(new_data + width + row * new_width,
              w2.data<float>() + row * stride, width * sizeof(float));
+      // copy w3 with padding width
       memcpy(new_data + 2 * width + row * new_width,
-             w3.data<float>() + row * stride, width * sizeof(float));
+             w3.data<float>() + row * stride, w3.dims()[1] * sizeof(float));
     }
   } else {
     using EMAM = Eigen::Map<
@@ -166,7 +167,7 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
                              &padding_weights)) {
       return;
     }
-    fc_new_desc.SetAttr("padding_weights", false);  // padding_weights);
+    fc_new_desc.SetAttr("padding_weights", padding_weights);
 
     // Get weights tensors
     auto* w1 = scope->FindVar(fc1_w->Name())->GetMutable<LoDTensor>();
@@ -178,8 +179,7 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     framework::DDim fc_new_weights_dims = w1->dims();
     fc_new_weights_dims[1] += w2->dims()[1] + w3->dims()[1];
     if (padding_weights) {
-      fc_new_weights_dims[0] -= 4;
-      fc_new_weights_dims[1] -= 4 * 3;
+      fc_new_weights_dims[1] -= 4 * 2;
     }
 
     // Create combined weights variable
