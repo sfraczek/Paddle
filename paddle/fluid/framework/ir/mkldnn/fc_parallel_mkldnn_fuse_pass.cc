@@ -46,6 +46,10 @@ bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
                             attr_name);
     return false;
   }
+  if (attr_name == "padding_weights") {
+    fc_new_desc->SetAttr(attr_name, false);
+    return true;
+  }
   fc_new_desc->SetAttr(attr_name, attr);
   return true;
 }
