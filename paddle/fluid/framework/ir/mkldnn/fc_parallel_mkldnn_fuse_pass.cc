@@ -170,7 +170,8 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     if (!CopyAttrIfConsistent<bool>("padding_weights", fc1, fc2, fc3,
                                     &fc_new_desc))
       return;
-    auto padding_weights = boost::get<bool>(fc1.GetAttr("padding_weights"));
+    auto padding_weights =
+        boost::get<bool>(fc1->Op().GetAttr("padding_weights"));
 
     // Get weights tensors
     auto* w1 = scope->FindVar(fc1_w->Name())->GetMutable<LoDTensor>();
