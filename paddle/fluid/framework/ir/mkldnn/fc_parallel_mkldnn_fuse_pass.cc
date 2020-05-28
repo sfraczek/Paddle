@@ -42,8 +42,7 @@ bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
                           OpDesc* fc_new_desc) {
   T attr;
   if (!GetAttrFromThreeOps(attr_name, op1, op2, op3, &attr)) {
-    string::PrettyLogDetail("%s is not consistent. Not fusing.",
-                            attr_name);
+    string::PrettyLogDetail("%s is not consistent. Not fusing.", attr_name);
     return false;
   }
   if (attr_name == "padding_weights") {
@@ -171,8 +170,7 @@ void FcParallelMkldnnFusePass::ApplyImpl(ir::Graph* graph) const {
     if (!CopyAttrIfConsistent<bool>("padding_weights", fc1, fc2, fc3,
                                     &fc_new_desc))
       return;
-    auto padding_weights =
-        boost::get<bool>(fc_new_desc.GetAttr("padding_weights"));
+    auto padding_weights = true;
 
     // Get weights tensors
     auto* w1 = scope->FindVar(fc1_w->Name())->GetMutable<LoDTensor>();
