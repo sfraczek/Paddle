@@ -25,30 +25,6 @@ namespace paddle {
 namespace framework {
 namespace ir {
 
-template <typename T>
-bool GetAttrFromThreeOps(std::string attr_name, const ir::Node* op1,
-                         const ir::Node* op2, const ir::Node* op3,
-                         T* out_attr_val) {
-  *out_attr_val = op1->Op()->GetAttrIfExists<T>(attr_name);
-  if (*out_attr_val != op2->Op()->GetAttrIfExists<T>(attr_name) ||
-      *out_attr_val != op3->Op()->GetAttrIfExists<T>(attr_name))
-    return false;
-  return true;
-}
-
-template <typename T>
-bool CopyAttrIfConsistent(std::string attr_name, const ir::Node* op1,
-                          const ir::Node* op2, const ir::Node* op3,
-                          OpDesc* fc_new_desc) {
-  T attr;
-  if (!GetAttrFromThreeOps(attr_name, op1, op2, op3, &attr)) {
-    string::PrettyLogDetail("%s is not consistent. Not fusing.", attr_name);
-    return false;
-  }
-  fc_new_desc->SetAttr(attr_name, attr);
-  return true;
-}
-
 void ConcatWeights(const LoDTensor& w1, const LoDTensor& w2,
                    const LoDTensor& w3, LoDTensor* fc_new_weights_tensor,
                    bool padding_weights) {
@@ -147,27 +123,13 @@ void FcParallelFusePass::ApplyImpl(ir::Graph* graph) const {
     // Create new FC node that replaces the 3 fused ones.
     OpDesc fc_new_desc;
     fc_new_desc.SetType("fc");
-
-    if (!CopyAttrIfConsistent<int>("in_num_col_dims", fc1, fc2, fc3,
-                                   &fc_new_desc))
+    // copy all atributes or do not fuse if they are not equal
+    auto& fc1_attrs = fc1->Op()->GetAttrMap();
+    if (!(fc1_attrs == fc2->Op()->GetAttrMap() &&
+          fc1_attrs == fc3->Op()->GetAttrMap()))
       return;
+    fc_new_desc.SetAttrMap(fc1_attrs);
 
-    if (!CopyAttrIfConsistent<float>("Scale_in", fc1, fc2, fc3, &fc_new_desc))
-      return;
-
-    if (!CopyAttrIfConsistent<float>("Scale_out", fc1, fc2, fc3, &fc_new_desc))
-      return;
-
-    if (!CopyAttrIfConsistent<std::string>("activation_type", fc1, fc2, fc3,
-                                           &fc_new_desc))
-      return;
-
-    if (!CopyAttrIfConsistent<bool>("use_mkldnn", fc1, fc2, fc3, &fc_new_desc))
-      return;
-
-    if (!CopyAttrIfConsistent<bool>("padding_weights", fc1, fc2, fc3,
-                                    &fc_new_desc))
-      return;
     auto padding_weights = fc_new_desc.GetAttrIfExists<bool>("padding_weights");
 
     // Verify if weights dims allow for concatenation
