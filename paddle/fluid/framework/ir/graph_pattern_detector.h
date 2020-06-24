@@ -988,6 +988,21 @@ struct PriorBox : public PatternBase {
   PATTERN_DECL_NODE(prior_box_variances);
 };
 
+// Stack + ElementwiseAdd
+struct StackElementwiseAdd : public PatternBase {
+  StackElementwiseAdd(PDPattern* pattern, const std::stirng& name_scope)
+  : PatternBase(pattern, name_scope, "stack_elementwise_add") {}
+
+  Pdnode* operator()();
+
+  PATTERN_DECL_NODE(prev_op);
+  PATTERN_DECL_NODE(stack_in);
+  PATTERN_DECL_NODE(stack_op);
+  PATTERN_DECL_NODE(stack_out);
+  PATTERN_DECL_NODE(elementwise_add_op);
+  PATTERN_DECL_NODE(elementwise_add_out);
+};
+
 // Conv + ElementwiseAdd + an activation
 // This pattern can futher fuse the conv related ops after the conv+bn fusion.
 struct ConvElementwiseaddAct : public PatternBase {

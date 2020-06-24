@@ -23,18 +23,15 @@ namespace paddle {
 namespace framework {
 namespace ir {
 /*
- * Fuse Reshape->Transpose->MatMul when MatMul uses mkldnn.
+ * Fuse Stack->ElementwiseAdd by adding broadcasting to ElementwiseAdd.
  */
-class ReshapeTransposeMatmulMkldnnFusePass : public FusePassBase {
+class StackElementwiseAddMkldnnFusePass : public FusePassBase {
  public:
-  virtual ~ReshapeTransposeMatmulMkldnnFusePass() {}
+  virtual ~StackElementwiseAddMkldnnFusePass() {}
 
  protected:
   void ApplyImpl(ir::Graph* graph) const override;
-  const std::string name_scope_{"reshape_transpose_matmul_mkldnn_fuse"};
-
-  void Fuse(Graph* graph, bool with_reshape_xshape,
-            bool with_transpose_xshape) const;
+  const std::string name_scope_{"stack_elementwise_add_mkldnn_fuse"};
 };
 }  // namespace ir
 }  // namespace framework

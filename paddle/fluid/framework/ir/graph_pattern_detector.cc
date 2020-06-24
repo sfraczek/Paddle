@@ -1611,6 +1611,31 @@ PDNode *patterns::PriorBox::operator()() {
 
 std::unordered_set<std::string> conv_act_set({"identity", "relu"});
 
+// Stack + ElementwiseAdd
+struct StackElementwiseAdd::operator()() {
+  auto prev_op = pattern->NewNode(prev_op_repr())->assert_is_op();
+  auto stack_in =
+      pattern->NewNode(stack_in_repr())->assert_is_op_input("stack")->AsInput();
+
+  auto stack_op = pattern->NewNode(stack_op_repr())->assert_is_op("stack");
+  auto elementwise_add_op = pattern->NewNode(elementwise_add_op_repr())
+                           ->assert_is_op("elementwise_add");
+
+  auto stack_out = pattern->NewNode(stack_out_repr())
+                  ->assert_is_op_output("stack")
+                  ->AsIntermediate()
+                  ->assert_is_op_input("elementwise_add","Y");
+
+  auto elementwise_add_out = pattern->NewNode(elementwise_add_out_repr())
+                                 ->assert_is_op_output("elementwise_add")
+                                 ->AsOutput();
+
+  prev_op->LinksTo({stack_in});
+  stack_op.LinksFrom({stack_in}).LinksTo({stack_out});
+  elementwise_add_op.LinksFrom({stack_out}).LinksTo({elementwise_add_out});
+  return elementwise_add_out;
+};
+
 PDNode *patterns::ConvElementwiseaddAct::operator()(PDNode *conv_in) {
   conv_in->AsInput();
   auto conv_op = pattern->NewNode(conv_op_repr())->assert_is_op("conv2d");
