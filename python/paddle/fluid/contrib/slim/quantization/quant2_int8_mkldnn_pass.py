@@ -361,6 +361,7 @@ class Quant2Int8MkldnnPass(object):
                                  'conv_transpose_eltwiseadd_bn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_bias_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_elementwise_add_mkldnn_fuse_pass')
+        graph = self._apply_pass(graph, 'fc_elementwise_add_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_relu_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'conv_relu6_mkldnn_fuse_pass')
         graph = self._apply_pass(graph, 'fc_fuse_pass',

@@ -40,18 +40,13 @@ class TestFCMKLDNNOp(OpTest):
         self._cpu_only = True
         self.use_mkldnn = True
         self.create_data()
-        self.inputs = {
-            'Input': self.matrix.input,
-            'W': self.matrix.weights,
-            'Bias': self.bias
-        }
+        self.inputs['Input'] = self.matrix.input
+        self.inputs['W'] = self.matrix.weights
+        self.inputs['Bias'] = self.bias
 
         self.attrs = {'use_mkldnn': self.use_mkldnn}
 
-        self.outputs = {
-            'Out': fully_connected_naive(self.matrix.input, self.matrix.weights,
-                                         self.bias)
-        }
+        self.outputs = {'Out': output}
 
     def test_check_output(self):
         # TODO(wangzhongpu): support mkldnn op in dygraph mode
@@ -68,6 +63,14 @@ class TestFCMKLDNNOp1(TestFCMKLDNNOp):
     def create_data(self):
         self.matrix = MatrixGenerate(2, 15, 48, 2, 2)
         self.bias = np.random.random(48).astype("float32")
+
+@skip_check_grad_ci(
+    reason="Fusion is for inference only, check_grad is not required.")
+class TestWithFuse(TestFCMKLDNNOp):
+    def create_data(self):
+        input_residual = np.random.random(self.output.shape).astype(self.dtype)
+        self.inputs['ResidualData'] = OpTest.np_dtype_to_fluid_dtype(input_residual)
+        output = np.add(output, input_residual)
 
 
 if __name__ == "__main__":

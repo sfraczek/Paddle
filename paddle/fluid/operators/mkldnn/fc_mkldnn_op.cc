@@ -19,6 +19,7 @@ limitations under the License. */
 #include "paddle/fluid/platform/device_context.h"
 #include "paddle/fluid/platform/mkldnn_helper.h"
 #include "paddle/fluid/platform/variant.h"
+#include "paddle/fluid/framework/data_layout_transform.h"
 
 namespace paddle {
 namespace operators {
@@ -120,9 +121,50 @@ class FCPrimitiveFactory {
     // Store weights and bias in the mkldnn cache
     CacheWeightsAndBias(dev_ctx, ctx);
 
-    // Based on format determined by inner_product, create output in desired
-    // memory format
-    output_ = CreateDstMemory(*fc_prim_desc, ctx, output);
+    bool fuse_residual_conn =
+        ctx.HasInput("ResidualData") &&
+        ctx.Input<Tensor>("ResidualData") != nullptr;
+
+    if (fuse_residual_conn) {
+      const auto* residual_data = ctx.Input<Tensor>("ResidualData");
+      PADDLE_ENFORCE_EQ(
+          output->dims(), residual_data->dims(),
+          platform::errors::InvalidArgument(
+              "Output and elementwise parameter need to have the "
+              "same dimension sizes, but got output's dimension = %d"
+              " and residual param's dimension =%d .",
+              output->dims().size(), residual_data->dims().size()));
+      if (residual_data->format() != paddle::platform::GetMKLDNNFormat(fc_prim_desc->dst_desc())) {
+        auto user_residual_md = platform::MKLDNNMemDesc(
+            paddle::framework::vectorize(residual_data->dims()),
+            paddle::framework::ToMKLDNNDataType(residual_data->type()),
+            residual_data->format());
+        // auto user_residual_memory_p = std::make_shared<mkldnn::memory>(
+        //     user_residual_md, engine_, to_void_cast<T_out>(residual_data->data<T_in>()));
+
+        // T_out* output_ =
+        //     output->mutable_data<T_out>(ctx.GetPlace(), fc_prim_desc->dst_desc().get_size());
+        // auto out_memory_p = std::make_shared<mkldnn::memory>(
+        //     fc_prim_desc->dst_desc(), engine_, output_);
+
+        // auto reorder_p =
+        //     std::make_shared<mkldnn::reorder>(*user_residual_memory_p, *output_);
+
+        // mkldnn::stream astream(engine_);
+        // reorder_p->execute(astream, {{MKLDNN_ARG_FROM, *user_residual_memory_p},
+        //                              {MKLDNN_ARG_TO, *out_memory_p}});
+        // astream.wait();
+        Reorder(user_residual_md, fc_prim_desc->dst_desc(), to_void_cast<T_out>(residual_data->data<T_out>()));
+      } else {
+        // tensor copy instea of
+        // output->ShareDataWith(*residual_data);
+        paddle::framework::TensorCopySync(*residual_data, ctx.GetPlace(), output);
+
+        // Based on format determined by inner_product, create output in desired
+        // memory format
+        output_ = CreateDstMemory(*fc_prim_desc, ctx, output);
+      }
+    }
 
     // Return MKL-DNN primitive ready to be fed into pipeline and executed
     fc_ = inner_product_forward(*fc_prim_desc);
