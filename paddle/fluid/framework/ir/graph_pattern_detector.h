@@ -1050,6 +1050,24 @@ struct ConvElementwiseadd : public PatternBase {
   PATTERN_DECL_NODE(elementwise_add_out);
 };
 
+// FC + ElementwiseAdd
+struct FCElementwiseadd : public PatternBase {
+  FCElementwiseadd(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "fc_elementwiseadd") {}
+
+  PDNode* operator()();
+
+  PATTERN_DECL_NODE(fc_in);
+  PATTERN_DECL_NODE(fc_op);
+  PATTERN_DECL_NODE(fc_out);
+  // PATTERN_DECL_NODE(fc_w);
+  // PATTERN_DECL_NODE(fc_bias);
+
+  PATTERN_DECL_NODE(elementwise_add_op);
+  PATTERN_DECL_NODE(elementwise_add_in_y);
+  PATTERN_DECL_NODE(elementwise_add_out);
+};
+
 // Conv with affine_channel
 // op: conv + (elementwise_add +) affine_channel
 // named nodes:

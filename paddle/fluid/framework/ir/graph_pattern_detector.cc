@@ -1745,6 +1745,35 @@ PDNode *patterns::ConvElementwiseadd::operator()(PDNode *conv_in) {
   return elementwise_add_out;
 }
 
+PDNode *patterns::FCElementwiseadd::operator()() {
+  auto fc_in = pattern->NewNode(fc_in_repr())->assert_is_op_input("fc", "Input")->AsInput();
+  auto fc_op = pattern->NewNode(fc_op_repr())->assert_is_op("fc");
+  auto fc_out = pattern->NewNode(fc_out_repr())
+                      ->assert_is_op_output("fc")
+                      ->assert_is_op_input("elementwise_add", "X")
+                      ->AsIntermediate();
+  // auto fc_w = pattern->NewNode(fc_w_repr())
+  //                        ->assert_is_op_input("fc", "W")
+  //                        ->AsInput();
+  //   auto fc_bias = pattern->NewNode(fc_bias_repr())
+  //                        ->assert_is_op_input("fc", "Bias")
+  //                        ->AsInput();
+  auto elementwise_add_op = pattern->NewNode(elementwise_add_op_repr())
+                                ->assert_is_op("elementwise_add");
+  auto elementwise_add_in_y = pattern->NewNode(elementwise_add_in_y_repr())
+                                  ->assert_is_op_input("elementwise_add", "Y")
+                                  ->AsInput();
+  auto elementwise_add_out = pattern->NewNode(elementwise_add_out_repr())
+                                 ->assert_is_op_output("elementwise_add")
+                                 ->AsOutput();
+
+  fc_op->LinksFrom({fc_in/*, fc_w, fc_bias*/}).LinksTo({fc_out});
+  elementwise_add_op->LinksFrom({fc_out, elementwise_add_in_y})
+      .LinksTo({elementwise_add_out});
+
+  return elementwise_add_out;
+}
+
 PDNode *patterns::ConvAffineChannel::operator()(
     paddle::framework::ir::PDNode *conv_input, bool with_eltwise_add) {
   // Create Operators

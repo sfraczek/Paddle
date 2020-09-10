@@ -35,7 +35,7 @@ class FCResidualMKLDNNFusePass : public FusePassBase {
  protected:
   void ApplyImpl(ir::Graph* graph) const override;
 
-  const std::string name_scope_{"residual_connection_fuse_pass"};
+  const std::string name_scope_{"fc_residual_fuse_pass"};
 };
 }  // namespace ir
 }  // namespace framework

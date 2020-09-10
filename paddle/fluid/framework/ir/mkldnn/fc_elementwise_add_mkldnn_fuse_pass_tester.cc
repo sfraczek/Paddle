@@ -98,20 +98,20 @@ struct TestIsReachable {
 };
 
 void AssertOpsCount(const std::unique_ptr<ir::Graph>& graph,
-                    int expected_conv_count,
+                    int expected_fc_count,
                     int expected_elementwise_add_count = 0) {
-  int conv_count = 0;
+  int fc_count = 0;
   int elementwise_add_count = 0;
 
   for (auto* node : graph->Nodes()) {
-    if (node->IsOp() && node->Op()->Type() == "conv2d") {
-      ++conv_count;
+    if (node->IsOp() && node->Op()->Type() == "fc") {
+      ++fc_count;
     }
     if (node->IsOp() && node->Op()->Type() == "elementwise_add") {
       ++elementwise_add_count;
     }
   }
-  EXPECT_EQ(conv_count, expected_conv_count);
+  EXPECT_EQ(fc_count, expected_fc_count);
   EXPECT_EQ(elementwise_add_count, expected_elementwise_add_count);
 }
 
@@ -139,7 +139,7 @@ ProgramDesc BuildProgramDesc(const std::vector<std::string>& transient_vars,
 }
 
 void RunPassAndAssert(ProgramDesc* prog, const std::string& from,
-                      const std::string& to, int expected_conv_num) {
+                      const std::string& to, int expected_fc_num) {
   std::unique_ptr<ir::Graph> graph(new ir::Graph(*prog));
 
   TestIsReachable is_reachable;
@@ -156,16 +156,16 @@ void RunPassAndAssert(ProgramDesc* prog, const std::string& from,
   EXPECT_EQ(original_nodes_num - nodes_removed + nodes_added,
             current_nodes_num);
 
-  AssertOpsCount(graph, expected_conv_num);
+  AssertOpsCount(graph, expected_fc_num);
 }
 }  // namespace
 
-TEST(ConvElementwiseAddMKLDNNFusePass, ConvolutionAsYWithElementwiseAddRelu) {
+TEST(ConvElementwiseAddMKLDNNFusePass, FCAsYWithElementwiseAddRelu) {
   auto prog = BuildProgramDesc({"a", "b", "c", "d", "e"}, {"bias", "weights"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
-  SetOp(&prog, "conv2d",
-        {{"Input", "b"}, {"Bias", "bias"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc",
+        {{"Input", "b"}, {"Bias", "bias"}, {"W", "weights"}},
         {"Output", "c"});
 
   SetOp(&prog, "elementwise_add", {{"X", "a"}, {"Y", "c"}}, {"Out", "d"});
@@ -175,19 +175,19 @@ TEST(ConvElementwiseAddMKLDNNFusePass, ConvolutionAsYWithElementwiseAddRelu) {
 }
 
 TEST(ConvElementwiseAddMKLDNNFusePass,
-     ConvolutionProjectionAsYWithElementwiseAddRelu) {
+     FCProjectionAsYWithElementwiseAddRelu) {
   auto prog = BuildProgramDesc({"a", "b", "c", "d", "e", "f"},
                                {"bias", "weights", "bias2", "weights2"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
   // right branch
-  SetOp(&prog, "conv2d",
-        {{"Input", "b"}, {"Bias", "bias"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc",
+        {{"Input", "b"}, {"Bias", "bias"}, {"W", "weights"}},
         {"Output", "c"});
 
   // left branch
-  SetOp(&prog, "conv2d",
-        {{"Input", "a"}, {"Bias", "bias2"}, {"Filter", "weights2"}},
+  SetOp(&prog, "fc",
+        {{"Input", "a"}, {"Bias", "bias2"}, {"W", "weights2"}},
         {"Output", "f"});
 
   SetOp(&prog, "elementwise_add", {{"X", "f"}, {"Y", "c"}}, {"Out", "d"});
@@ -197,11 +197,11 @@ TEST(ConvElementwiseAddMKLDNNFusePass,
 }
 
 TEST(ConvElementwiseAddMKLDNNFusePass,
-     ConvolutionAsYWithElementwiseAddReluNoBias) {
+     FCAsYWithElementwiseAddReluNoBias) {
   auto prog = BuildProgramDesc({"a", "b", "c", "d", "e"}, {"weights"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
-  SetOp(&prog, "conv2d", {{"Input", "b"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc", {{"Input", "b"}, {"W", "weights"}},
         {"Output", "c"});
   SetOp(&prog, "elementwise_add", {{"X", "a"}, {"Y", "c"}}, {"Out", "d"});
   SetOp(&prog, "relu", {{"X", "d"}}, {"Out", "e"});
@@ -209,12 +209,12 @@ TEST(ConvElementwiseAddMKLDNNFusePass,
   RunPassAndAssert(&prog, "a", "relu", 1);
 }
 
-TEST(ConvElementwiseAddMKLDNNFusePass, ConvolutionAsXWithElementwiseAddRelu) {
+TEST(ConvElementwiseAddMKLDNNFusePass, FCAsXWithElementwiseAddRelu) {
   auto prog = BuildProgramDesc({"a", "b", "c", "d", "e"}, {"bias", "weights"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
-  SetOp(&prog, "conv2d",
-        {{"Input", "b"}, {"Bias", "bias"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc",
+        {{"Input", "b"}, {"Bias", "bias"}, {"W", "weights"}},
         {"Output", "c"});
 
   SetOp(&prog, "elementwise_add", {{"X", "c"}, {"Y", "a"}}, {"Out", "d"});
@@ -224,11 +224,11 @@ TEST(ConvElementwiseAddMKLDNNFusePass, ConvolutionAsXWithElementwiseAddRelu) {
 }
 
 TEST(ConvElementwiseAddMKLDNNFusePass,
-     ConvolutionAsXWithElementwiseAddReluNoBias) {
+     FCAsXWithElementwiseAddReluNoBias) {
   auto prog = BuildProgramDesc({"a", "b", "c", "d", "e"}, {"weights"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
-  SetOp(&prog, "conv2d", {{"Input", "b"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc", {{"Input", "b"}, {"W", "weights"}},
         {"Output", "c"});
   SetOp(&prog, "elementwise_add", {{"X", "c"}, {"Y", "a"}}, {"Out", "d"});
   SetOp(&prog, "relu", {{"X", "d"}}, {"Out", "e"});
@@ -241,10 +241,10 @@ TEST(ConvElementwiseAddMKLDNNFusePass, NoFusion) {
       BuildProgramDesc({"a", "b", "c", "d", "e", "f", "g"}, {"weights"});
 
   SetOp(&prog, "sigmoid", {{"X", "a"}}, {"Out", "b"});
-  SetOp(&prog, "conv2d", {{"Input", "b"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc", {{"Input", "b"}, {"W", "weights"}},
         {"Output", "c"});
 
-  SetOp(&prog, "conv2d", {{"Input", "d"}, {"Filter", "weights"}},
+  SetOp(&prog, "fc", {{"Input", "d"}, {"W", "weights"}},
         {"Output", "e"});
 
   SetOp(&prog, "elementwise_add", {{"X", "c"}, {"Y", "e"}}, {"Out", "f"});
