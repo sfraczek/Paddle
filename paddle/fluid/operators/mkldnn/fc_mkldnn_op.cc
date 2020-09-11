@@ -121,9 +121,8 @@ class FCPrimitiveFactory {
     // Store weights and bias in the mkldnn cache
     CacheWeightsAndBias(dev_ctx, ctx);
 
-    bool fuse_residual_conn =
-        ctx.HasInput("ResidualData") &&
-        ctx.Input<Tensor>("ResidualData") != nullptr;
+    bool fuse_residual_conn = ctx.HasInput("ResidualData") &&
+                              ctx.Input<Tensor>("ResidualData") != nullptr;
 
     if (fuse_residual_conn) {
       const auto* residual_data = ctx.Input<Tensor>("ResidualData");
@@ -134,16 +133,22 @@ class FCPrimitiveFactory {
               "same dimension sizes, but got output's dimension = %d"
               " and residual param's dimension =%d .",
               output->dims().size(), residual_data->dims().size()));
-      if (residual_data->format() != paddle::platform::GetMKLDNNFormat(fc_prim_desc->dst_desc())) {
+      if (residual_data->format() !=
+          paddle::platform::GetMKLDNNFormat(fc_prim_desc->dst_desc())) {
         auto user_residual_md = platform::MKLDNNMemDesc(
             paddle::framework::vectorize(residual_data->dims()),
             paddle::framework::ToMKLDNNDataType(residual_data->type()),
             residual_data->format());
 
-        Reorder(user_residual_md, fc_prim_desc->dst_desc(), to_void_cast<T_out>(residual_data->data<T_out>()));
+        Reorder(user_residual_md, fc_prim_desc->dst_desc(),
+                to_void_cast<T_out>(residual_data->data<T_out>()));
       } else {
-        // tensor copy to avoid problem with overwriting residual data input tensor
-        paddle::framework::TensorCopySync(*residual_data, ctx.GetPlace(), output);
+        // tensor copy to avoid problem with overwriting residual data input
+        // tensor
+        auto output_data = output->mutable_data<T_out>(
+            ctx.GetPlace(), residual_data->memory_size());
+        framework::TensorCopy(*residual_data, residual_data->place(),
+                                  output);
 
         // Based on format determined by inner_product, create output in desired
         // memory format
@@ -461,6 +466,18 @@ class FCPrimitiveFactory {
     auto output_shift_scale = ComputeOutputShiftScale(ctx);
     int mask = CreateMask(1, output_shift_scale.size() > 1);
     attributes.set_output_scales(mask, output_shift_scale);
+
+    // Fusion with Elementwise layer relies on adding a sum post-operation with
+    // the scale parameter. It is assumed that when fuse_residual_connection is
+    // true, the output tensor contains the data coming from residual
+    // connection. The result of this post_op is:
+    // Output = scale * Output + Conv_Out.
+    bool fuse_residual_conn = ctx.HasInput("ResidualData") &&
+                              ctx.Input<Tensor>("ResidualData") != nullptr;
+    if (fuse_residual_conn) {
+      float sum_scale = 1.0f;
+      post_operations.append_sum(sum_scale);
+    }
 
     if (ctx.Attr<std::string>("activation_type") == "relu") {
       constexpr float scale = 1.0f;
